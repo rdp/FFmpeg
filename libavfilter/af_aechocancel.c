@@ -31,12 +31,14 @@
 #include "audio.h"
 #include "bufferqueue.h"
 #include "internal.h"
+#include <speex/speex_echo.h>
 
 typedef struct {
     const AVClass *class;
     int nb_inputs; // LODO remove
     int route[SWR_CH_MAX]; /**< channels routing, see copy_samples */
     int bps;
+    SpeexEchoState *echo_state;
     struct aechocancel_input {
         struct FFBufQueue queue;
         int nb_ch;         /**< number of channels for the input */
@@ -104,6 +106,7 @@ static int config_output(AVFilterLink *outlink)
     am->bps = av_get_bytes_per_sample(ctx->outputs[0]->format);
     outlink->sample_rate = ctx->inputs[0]->sample_rate;
     outlink->time_base   = ctx->inputs[0]->time_base;
+    am->echo_state = speex_echo_state_init(am->bps, 10*am->bps); // bytes per sample yikes
 
     return 0;
 }
