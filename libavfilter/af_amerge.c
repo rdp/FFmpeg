@@ -205,7 +205,7 @@ static inline void copy_samples(int nb_inputs, struct amerge_input in[],
         route_cur = route;
         for (i = 0; i < nb_inputs; i++) {
             for (c = 0; c < in[i].nb_ch; c++) {
-                memcpy((*outs) + bps * *(route_cur++), ins[i], bps);
+                memcpy((*outs) + bps * *(route_cur++), ins[i], bps); // bytes per sample...
                 ins[i] += bps;
             }
         }

@@ -115,13 +115,12 @@ static int request_frame(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AEchoCancelContext *am = ctx->priv;
-    int i, ret;
-    for (i = 0; i < am->nb_inputs; i++)
-        if (!am->in[i].nb_samples)
-            if ((ret = ff_request_frame(ctx->inputs[i])) < 0)
-                return ret;
-
-    return 0;
+    int i, ret = 0;
+    for (i = 0; i < am->nb_inputs; i++) {
+       ret = ff_request_frame(ctx->inputs[i]);
+       av_log(ctx, AV_LOG_ERROR, "requested from %d got %d\n", i, ret);
+    }
+    return ret;
 }
 
 static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
@@ -134,25 +133,26 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     AVFilterBufferRef *outbuf, *inbuf[SWR_CH_MAX];
     uint8_t *ins[SWR_CH_MAX], *outs;
 
-    // figure out which one is sending us stuff
+    // figure out which one is sending us the sample
     for (input_number = 0; input_number < am->nb_inputs; input_number++)
         if (inlink == ctx->inputs[input_number])
             break;
-    av_assert1(input_number < am->nb_inputs);
-    //ff_bufqueue_add(ctx, &am->in[input_number].queue, insamples); // add it to this stream's queue TODO shouldn't need queues at all...
-    //am->in[input_number].nb_samples += insamples->audio->nb_samples;
-    //nb_samples = am->in[0].nb_samples;
+    av_assert0(input_number < 2);
+    av_assert0(av_get_bytes_per_sample(insamples->format) == 2);
 
-    // assume we want to cancel audio [1] from [0]
-    // TODO send audio[1] to the queue... 
-    int linesize =
-        insamples->audio->nb_samples *
-        av_get_bytes_per_sample(insamples->format);
-//    memcpy(samplesref->data[0], ...)
-    if (input_number == 0)
-      return ff_filter_samples(ctx->outputs[0], insamples); // Send a buffer of audio samples to the next filter. 
-    else
+    // cancel all audio in [1] from [0]
+    if(input_number == 1) {
+      // add it to the cancel queue
+      av_log(ctx, AV_LOG_ERROR, "adding %d samples to cancel q\n", insamples->audio->nb_samples);
+      for(i = 0; i < insamples->audio->nb_samples; i++)
+        speex_echo_playback(am->echo_state, insamples->data[0] + i*2);
       return 0; // ok
+    } else {
+      av_log(ctx, AV_LOG_ERROR, "parsing %d samples to remove it from\n", insamples->audio->nb_samples);
+      for(i = 0; i < insamples->audio->nb_samples; i++)
+        speex_echo_capture(am->echo_state, insamples->data[0] + i*2, insamples->data[0] + i*2);
+      return ff_filter_samples(ctx->outputs[0], insamples); // Send a buffer of audio samples to the next filter. 
+    }
 }
 
 static av_cold int init(AVFilterContext *ctx, const char *args)
@@ -172,15 +172,18 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     am->in = av_calloc(am->nb_inputs, sizeof(*am->in));
     if (!am->in)
         return AVERROR(ENOMEM);
+    av_log(ctx, AV_LOG_ERROR, "setting names %d\n", am->nb_inputs);
     for (i = 0; i < am->nb_inputs; i++) {
+    av_log(ctx, AV_LOG_ERROR, "setting name %d\n", i);
+        snprintf(name, sizeof(name), "in%d", i);
         AVFilterPad pad = {
-            .name             = name,
+            .name             = av_strdup(name),
             .type             = AVMEDIA_TYPE_AUDIO,
             .filter_samples   = filter_samples,
-            .min_perms        = AV_PERM_READ | AV_PERM_PRESERVE,
+            .min_perms        = AV_PERM_READ | AV_PERM_PRESERVE | AV_PERM_WRITE,
         };
-        snprintf(name, sizeof(name), "in%d", i);
         ff_insert_inpad(ctx, i, &pad);
+    av_log(ctx, AV_LOG_ERROR, "setting name2 %d\n", i);
     }
     return 0;
 }
@@ -199,7 +202,8 @@ AVFilter avfilter_af_aechocancel = {
         { .name             = "default",
           .type             = AVMEDIA_TYPE_AUDIO,
           .config_props     = config_output,
-          .request_frame    = request_frame, },
+          .request_frame    = request_frame
+         },
         { .name = NULL }
     },
     .priv_class = &aechocancel_class,
