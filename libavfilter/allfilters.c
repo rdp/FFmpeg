@@ -39,6 +39,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (AFIFO,       afifo,       af);
     REGISTER_FILTER (AFORMAT,     aformat,     af);
     REGISTER_FILTER (AMERGE,      amerge,      af);
+    REGISTER_FILTER (AMERGE,      aechocancel,      af);
     REGISTER_FILTER (AMIX,        amix,        af);
     REGISTER_FILTER (ANULL,       anull,       af);
     REGISTER_FILTER (ARESAMPLE,   aresample,   af);

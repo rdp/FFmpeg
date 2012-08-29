@@ -49,6 +49,7 @@ OBJS-$(CONFIG_ACONVERT_FILTER)               += af_aconvert.o
 OBJS-$(CONFIG_AFIFO_FILTER)                  += fifo.o
 OBJS-$(CONFIG_AFORMAT_FILTER)                += af_aformat.o
 OBJS-$(CONFIG_AMERGE_FILTER)                 += af_amerge.o
+OBJS-$(CONFIG_AMERGE_FILTER)                 += af_aechocancel.o
 OBJS-$(CONFIG_AMIX_FILTER)                   += af_amix.o
 OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
 OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o
