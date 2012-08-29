@@ -20,7 +20,7 @@
 
 /**
  * @file
- * Audio merging filter
+ * Audio echo canceling filter
  */
 
 #include "libavutil/audioconvert.h"
@@ -34,7 +34,7 @@
 
 typedef struct {
     const AVClass *class;
-    int nb_inputs;
+    int nb_inputs; // LODO remove
     int route[SWR_CH_MAX]; /**< channels routing, see copy_samples */
     int bps;
     struct aechocancel_input {
@@ -42,17 +42,13 @@ typedef struct {
         int nb_ch;         /**< number of channels for the input */
         int nb_samples;
         int pos;
-    } *in;
+    } *in; // an array of them TODO [2]
 } AEchoCancelContext;
 
 #define OFFSET(x) offsetof(AEchoCancelContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
-static const AVOption aechocancel_options[] = {
-    { "inputs", "specify the number of inputs", OFFSET(nb_inputs),
-      AV_OPT_TYPE_INT, { .dbl = 2 }, 2, SWR_CH_MAX, FLAGS },
-    {0}
-};
+static const AVOption aechocancel_options[] = { {0} };
 
 AVFILTER_DEFINE_CLASS(aechocancel);
 
@@ -73,13 +69,13 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterFormats *formats;
     AVFilterChannelLayouts *layouts;
     int i, overlap = 0, nb_ch = 0;
+    int sample_rates[] = { 44100, -1 };
 
     if(am->nb_inputs !=2 )
         av_log(ctx, AV_LOG_ERROR, "Requires 2 input channels\n");
 
     formats = ff_make_format_list((int[]){ AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_NONE });
     ff_set_common_formats(ctx, formats);
-    int sample_rates[] = { 44100, -1 };
     ff_set_common_samplerates(ctx, ff_make_format_list(sample_rates));//f_all_samplerates());
     return 0;
 }
@@ -89,6 +85,7 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AEchoCancelContext *am = ctx->priv;
     int i;
+    int nb_channels;
 
     for (i = 1; i < am->nb_inputs; i++) {
         if (ctx->inputs[i]->sample_rate != ctx->inputs[0]->sample_rate) {
@@ -98,12 +95,15 @@ static int config_output(AVFilterLink *outlink)
                    ctx->inputs[i]->sample_rate, i, ctx->inputs[0]->sample_rate);
             return AVERROR(EINVAL);
         }
+
+        nb_channels = av_get_channel_layout_nb_channels(ctx->inputs[i]->channel_layout);
+        if (nb_channels != 1) {
+          av_log(ctx, AV_LOG_ERROR, "Inputs must be mono, not stereo %d\n", nb_channels);
+        }
     }
     am->bps = av_get_bytes_per_sample(ctx->outputs[0]->format);
     outlink->sample_rate = ctx->inputs[0]->sample_rate;
     outlink->time_base   = ctx->inputs[0]->time_base;
-
-    av_log(ctx, AV_LOG_VERBOSE, "done init aecho\n");
 
     return 0;
 }
@@ -113,49 +113,12 @@ static int request_frame(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AEchoCancelContext *am = ctx->priv;
     int i, ret;
-
     for (i = 0; i < am->nb_inputs; i++)
         if (!am->in[i].nb_samples)
             if ((ret = ff_request_frame(ctx->inputs[i])) < 0)
                 return ret;
+
     return 0;
-}
-
-/**
- * Copy samples from several input streams to one output stream.
- * @param nb_inputs number of inputs
- * @param in        inputs; used only for the nb_ch field;
- * @param route     routing values;
- *                  input channel i goes to output channel route[i];
- *                  i <  in[0].nb_ch are the channels from the first output;
- *                  i >= in[0].nb_ch are the channels from the second output
- * @param ins       pointer to the samples of each inputs, in packed format;
- *                  will be left at the end of the copied samples
- * @param outs      pointer to the samples of the output, in packet format;
- *                  must point to a buffer big enough;
- *                  will be left at the end of the copied samples
- * @param ns        number of samples to copy
- * @param bps       bytes per sample
- */
-static inline void copy_samples(int nb_inputs, struct aechocancel_input in[],
-                                int *route, uint8_t *ins[],
-                                uint8_t **outs, int ns, int bps)
-{
-    int *route_cur;
-    int i, c, nb_ch = 0;
-
-    for (i = 0; i < nb_inputs; i++)
-        nb_ch += in[i].nb_ch;
-    while (ns--) {
-        route_cur = route;
-        for (i = 0; i < nb_inputs; i++) {
-            for (c = 0; c < in[i].nb_ch; c++) {
-                memcpy((*outs) + bps * *(route_cur++), ins[i], bps);
-                ins[i] += bps;
-            }
-        }
-        *outs += nb_ch * bps;
-    }
 }
 
 static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
@@ -168,70 +131,25 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     AVFilterBufferRef *outbuf, *inbuf[SWR_CH_MAX];
     uint8_t *ins[SWR_CH_MAX], *outs;
 
+    // figure out which one is sending us stuff
     for (input_number = 0; input_number < am->nb_inputs; input_number++)
         if (inlink == ctx->inputs[input_number])
             break;
     av_assert1(input_number < am->nb_inputs);
-    ff_bufqueue_add(ctx, &am->in[input_number].queue, insamples);
-    am->in[input_number].nb_samples += insamples->audio->nb_samples;
-    nb_samples = am->in[0].nb_samples;
-    for (i = 1; i < am->nb_inputs; i++)
-        nb_samples = FFMIN(nb_samples, am->in[i].nb_samples);
-    if (!nb_samples)
-        return 0;
+    //ff_bufqueue_add(ctx, &am->in[input_number].queue, insamples); // add it to this stream's queue TODO shouldn't need queues at all...
+    //am->in[input_number].nb_samples += insamples->audio->nb_samples;
+    //nb_samples = am->in[0].nb_samples;
 
-    outbuf = ff_get_audio_buffer(ctx->outputs[0], AV_PERM_WRITE, nb_samples);
-    outs = outbuf->data[0];
-    for (i = 0; i < am->nb_inputs; i++) {
-        inbuf[i] = ff_bufqueue_peek(&am->in[i].queue, 0);
-        ins[i] = inbuf[i]->data[0] +
-                 am->in[i].pos * am->in[i].nb_ch * am->bps;
-    }
-    avfilter_copy_buffer_ref_props(outbuf, inbuf[0]);
-    outbuf->pts = inbuf[0]->pts == AV_NOPTS_VALUE ? AV_NOPTS_VALUE :
-                  inbuf[0]->pts +
-                  av_rescale_q(am->in[0].pos,
-                               (AVRational){ 1, ctx->inputs[0]->sample_rate },
-                               ctx->outputs[0]->time_base);
-
-    outbuf->audio->nb_samples     = nb_samples;
-    outbuf->audio->channel_layout = outlink->channel_layout;
-
-    while (nb_samples) {
-        ns = nb_samples;
-        for (i = 0; i < am->nb_inputs; i++)
-            ns = FFMIN(ns, inbuf[i]->audio->nb_samples - am->in[i].pos);
-        /* Unroll the most common sample formats: speed +~350% for the loop,
-           +~13% overall (including two common decoders) */
-        switch (am->bps) {
-            case 1:
-                copy_samples(am->nb_inputs, am->in, am->route, ins, &outs, ns, 1);
-                break;
-            case 2:
-                copy_samples(am->nb_inputs, am->in, am->route, ins, &outs, ns, 2);
-                break;
-            case 4:
-                copy_samples(am->nb_inputs, am->in, am->route, ins, &outs, ns, 4);
-                break;
-            default:
-                copy_samples(am->nb_inputs, am->in, am->route, ins, &outs, ns, am->bps);
-                break;
-        }
-
-        nb_samples -= ns;
-        for (i = 0; i < am->nb_inputs; i++) {
-            am->in[i].nb_samples -= ns;
-            am->in[i].pos += ns;
-            if (am->in[i].pos == inbuf[i]->audio->nb_samples) {
-                am->in[i].pos = 0;
-                avfilter_unref_buffer(inbuf[i]);
-                ff_bufqueue_get(&am->in[i].queue);
-                inbuf[i] = ff_bufqueue_peek(&am->in[i].queue, 0);
-                ins[i] = inbuf[i] ? inbuf[i]->data[0] : NULL;
-            }
-        }
-    }
-    return ff_filter_samples(ctx->outputs[0], outbuf);
+    // assume we want to cancel audio [1] from [0]
+    // TODO send audio[1] to the queue... 
+    int linesize =
+        insamples->audio->nb_samples *
+        av_get_bytes_per_sample(insamples->format);
+//    memcpy(samplesref->data[0], ...)
+    if (input_number == 0)
+      return ff_filter_samples(ctx->outputs[0], insamples); // Send a buffer of audio samples to the next filter. 
+    else
+      return 0; // ok
 }
 
 static av_cold int init(AVFilterContext *ctx, const char *args)
@@ -241,6 +159,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     char name[16];
 
     am->class = &aechocancel_class;
+    am->nb_inputs = 2; // LODO remove
     av_opt_set_defaults(am);
     ret = av_set_options_string(am, args, "=", ":");
     if (ret < 0) {
