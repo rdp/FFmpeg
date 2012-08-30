@@ -35,7 +35,6 @@
 
 typedef struct {
     const AVClass *class;
-    int nb_inputs; // LODO remove
     int echo_buffer_millis;
     int frame_size;
     int route[SWR_CH_MAX]; /**< channels routing, see copy_samples */  //LODO remove
@@ -67,7 +66,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     AEchoCancelContext *am = ctx->priv;
     int i;
     speex_echo_state_destroy(am->echo_state);
-    for (i = 0; i < am->nb_inputs; i++)
+    for (i = 0; i < 2; i++)
         ff_bufqueue_discard_all(&am->in[i].queue);
     av_freep(&am->in);
 }
@@ -79,10 +78,7 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterFormats *formats;
     AVFilterChannelLayouts *layouts;
     int i, overlap = 0, nb_ch = 0;
-    int sample_rates[] = { 44100, -1 };
-
-    if(am->nb_inputs !=2 )
-        av_log(ctx, AV_LOG_ERROR, "Requires 2 input channels\n");
+    //int sample_rates[] = { 44100, -1 };
 
     formats = ff_make_format_list((int[]){ AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_NONE });
     ff_set_common_formats(ctx, formats);
@@ -98,7 +94,7 @@ static int config_output(AVFilterLink *outlink)
     int i;
     int nb_channels;
 
-    for (i = 1; i < am->nb_inputs; i++) {
+    for (i = 1; i < 2; i++) {
         if (ctx->inputs[i]->sample_rate != ctx->inputs[0]->sample_rate) {
             av_log(ctx, AV_LOG_ERROR,
                    "Inputs must have the same sample rate "
@@ -150,7 +146,7 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     uint8_t *ins[SWR_CH_MAX], *outs;
 
     // figure out which one is sending us the sample
-    for (input_number = 0; input_number < am->nb_inputs; input_number++)
+    for (input_number = 0; input_number < 2; input_number++)
         if (inlink == ctx->inputs[input_number])
             break;
     av_assert0(input_number < 2);
@@ -180,18 +176,17 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     char name[16];
 
     am->class = &aechocancel_class;
-    am->nb_inputs = 2; // LODO remove
     av_opt_set_defaults(am);
     ret = av_set_options_string(am, args, "=", ":");
     if (ret < 0) {
         av_log(ctx, AV_LOG_ERROR, "Error parsing options: '%s'\n", args);
         return ret;
     }
-    am->in = av_calloc(am->nb_inputs, sizeof(*am->in));
+    am->in = av_calloc(2, sizeof(*am->in));
     if (!am->in)
         return AVERROR(ENOMEM);
-    for (i = 0; i < am->nb_inputs; i++) {
-        snprintf(name, sizeof(name), "in%d", i);
+    for (i = 0; i < 2; i++) {
+        snprintf(name, sizeof(name), "echo%d", i);
         AVFilterPad pad = {
             .name             = av_strdup(name),
             .type             = AVMEDIA_TYPE_AUDIO,
