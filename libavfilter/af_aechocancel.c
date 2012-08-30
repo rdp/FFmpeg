@@ -116,7 +116,7 @@ static int config_output(AVFilterLink *outlink)
     outlink->sample_rate = ctx->inputs[0]->sample_rate;
     outlink->time_base   = ctx->inputs[0]->time_base;
     int tail_length_samples = am->echo_buffer_millis * outlink->sample_rate / 1000 / am->frame_size;
-    av_log(ctx, AV_LOG_DEBUG, "using number of samples %d\n", tail_length_samples);
+    av_log(ctx, AV_LOG_DEBUG, "using number of samples %d for %d ms at %d hz\n", tail_length_samples, am->echo_buffer_millis, outlink->sample_rate );
     am->echo_state = speex_echo_state_init(am->frame_size, tail_length_samples);
 
     return 0;
@@ -129,11 +129,10 @@ static int request_frame(AVFilterLink *outlink)
     int i, ret = 0;
     for (i = 0; i < 2; i++) { // speex seems to prefer that you start playback first...
        ret = ff_request_frame(ctx->inputs[i]);
-       av_log(ctx, AV_LOG_ERROR, "requested from %d got %d\n", i, ret);
        if (ret == AVERROR_EOF) {
-          // ignore
+          // ignore...
        } else if (ret < 0) {
-          // ??
+          // what do -11's here mean? seems safe to ignore
           // return ret;
        }
     }
