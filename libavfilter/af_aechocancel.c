@@ -107,11 +107,13 @@ static int config_output(AVFilterLink *outlink)
         }
     }
     am->bps = av_get_bytes_per_sample(ctx->outputs[0]->format); // bytes per sample...
-    outlink->sample_rate = ctx->inputs[0]->sample_rate;
+    int sample_rate = ctx->inputs[0]->sample_rate; // like 44100
+    outlink->sample_rate = sample_rate;
     outlink->time_base   = ctx->inputs[0]->time_base;
-    int tail_length_samples = am->echo_buffer_millis * outlink->sample_rate / 1000;
-    av_log(ctx, AV_LOG_DEBUG, "using number of samples %d for %d ms at %d hz\n", tail_length_samples, am->echo_buffer_millis, outlink->sample_rate );
+    int tail_length_samples = am->echo_buffer_millis * sample_rate / 1000;
+    av_log(ctx, AV_LOG_DEBUG, "using number of samples %d for %d ms at %d hz\n", tail_length_samples, am->echo_buffer_millis, sample_rate );
     am->echo_state = speex_echo_state_init(am->frame_size, tail_length_samples);
+    speex_echo_ctl(am->echo_state, SPEEX_ECHO_SET_SAMPLING_RATE, &sample_rate);
 
     return 0;
 }
@@ -121,7 +123,7 @@ static int request_frame(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AEchoCancelContext *am = ctx->priv;
     int i, ret = 0;
-    if(am->frames_ahead > 0) {
+    if(am->frames_ahead > 2) { // 2 frame delay?
       ret = ff_request_frame(ctx->inputs[0]); // get some more 'extract from' data
     } else {
       ret = ff_request_frame(ctx->inputs[1]); // get some more 'echo cancel' data
