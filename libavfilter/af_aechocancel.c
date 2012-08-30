@@ -32,6 +32,7 @@
 #include "bufferqueue.h"
 #include "internal.h"
 #include <speex/speex_echo.h>
+#include "libavutil/timestamp.h"
 
 typedef struct {
     const AVClass *class;
@@ -120,7 +121,7 @@ static int request_frame(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AEchoCancelContext *am = ctx->priv;
     int i, ret = 0;
-    if(am->frames_ahead > 2) {
+    if(am->frames_ahead > 0) {
       ret = ff_request_frame(ctx->inputs[0]); // get some more 'extract from' data
     } else {
       ret = ff_request_frame(ctx->inputs[1]); // get some more 'echo cancel' data
@@ -153,11 +154,11 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     if(input_number == 1) {
       // add it to the cancel queue
       am->frames_ahead++;
-      av_log(ctx, AV_LOG_ERROR, "adding %d samples to cancel q\n", insamples->audio->nb_samples);
+      av_log(ctx, AV_LOG_ERROR, "adding %d samples to cancel q, with ts %s\n", insamples->audio->nb_samples,  av_ts2timestr(insamples->pts, &inlink->time_base));
       speex_echo_playback(am->echo_state, insamples->data[0]);
       return 0; // ok
     } else {
-      av_log(ctx, AV_LOG_ERROR, "parsing %d samples to remove it from\n", insamples->audio->nb_samples);
+      av_log(ctx, AV_LOG_ERROR, "parsing %d samples to remove it from, with ts %s\n", insamples->audio->nb_samples,  av_ts2timestr(insamples->pts, &inlink->time_base));
       am->frames_ahead--;
       spx_int16_t out[am->frame_size];  
       speex_echo_capture(am->echo_state, insamples->data[0], &out);
