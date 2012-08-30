@@ -1,0 +1,9 @@
+I think they can use af_astreamsync to add in their own arbitrary "this one before that one" and it will work including splitting things...
+
+with stereo inputs -> segfault
+
+fix name with amerge
+
+fix "astreamsync -filter_complex "astreamsync""
+
+fix the -1's?

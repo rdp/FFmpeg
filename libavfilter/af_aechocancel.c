@@ -36,6 +36,7 @@
 typedef struct {
     const AVClass *class;
     int nb_inputs; // LODO remove
+    int num_samples;
     int route[SWR_CH_MAX]; /**< channels routing, see copy_samples */
     int bps;
     SpeexEchoState *echo_state;
@@ -50,7 +51,11 @@ typedef struct {
 #define OFFSET(x) offsetof(AEchoCancelContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
-static const AVOption aechocancel_options[] = { {0} };
+static const AVOption aechocancel_options[] = {
+    { "num_samples", "specify the number of samples to buffer", OFFSET(num_samples),
+      AV_OPT_TYPE_INT, { .dbl = 1000 }, 2, 1000000, FLAGS },
+    {0}
+};
 
 AVFILTER_DEFINE_CLASS(aechocancel);
 
@@ -106,7 +111,7 @@ static int config_output(AVFilterLink *outlink)
     am->bps = av_get_bytes_per_sample(ctx->outputs[0]->format);
     outlink->sample_rate = ctx->inputs[0]->sample_rate;
     outlink->time_base   = ctx->inputs[0]->time_base;
-    am->echo_state = speex_echo_state_init(am->bps, 10*am->bps); // bytes per sample yikes
+    am->echo_state = speex_echo_state_init(am->bps, am->num_samples*am->bps); // bytes per sample yikes
 
     return 0;
 }
@@ -116,7 +121,7 @@ static int request_frame(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AEchoCancelContext *am = ctx->priv;
     int i, ret = 0;
-    for (i = 0; i < am->nb_inputs; i++) {
+    for (i = 1; i >= 0; i--) {// prefer the feeder guy, though it doesn't help <sigh>
        ret = ff_request_frame(ctx->inputs[i]);
        av_log(ctx, AV_LOG_ERROR, "requested from %d got %d\n", i, ret);
     }
