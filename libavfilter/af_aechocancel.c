@@ -39,6 +39,7 @@ typedef struct {
     int frame_size;
     int route[SWR_CH_MAX]; /**< channels routing, see copy_samples */  //LODO remove
     int bps;
+    int frames_ahead;
     SpeexEchoState *echo_state;
     struct aechocancel_input {
         struct FFBufQueue queue;
@@ -123,15 +124,12 @@ static int request_frame(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AEchoCancelContext *am = ctx->priv;
     int i, ret = 0;
-    for (i = 0; i < 2; i++) { // speex seems to prefer that you start playback first...
-       ret = ff_request_frame(ctx->inputs[i]);
-       if (ret == AVERROR_EOF) {
-          // ignore...
-       } else if (ret < 0) {
-          // what do -11's here mean? seems safe to ignore
-          // return ret;
-       }
+    if(am->frames_ahead > 4) {
+      ret = ff_request_frame(ctx->inputs[0]); // get some more 'extract from' data
+    } else {
+      ret = ff_request_frame(ctx->inputs[1]); // get some more 'echo cancel' data
     }
+    // TODO this is still not good enough, since a single upstream request can inundate us with "x" samples...
     return ret;
 }
 
@@ -158,13 +156,15 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     // cancel all audio from [1] remove it from [0]
     if(input_number == 1) {
       // add it to the cancel queue
+      am->frames_ahead++;
       av_log(ctx, AV_LOG_ERROR, "adding %d samples to cancel q\n", insamples->audio->nb_samples);
       speex_echo_playback(am->echo_state, insamples->data[0]);
       return 0; // ok
     } else {
       av_log(ctx, AV_LOG_ERROR, "parsing %d samples to remove it from\n", insamples->audio->nb_samples);
+      am->frames_ahead--;
       spx_int16_t out[am->frame_size];  
-      speex_echo_capture(am->echo_state, insamples->data[0], insamples->data[0]);
+      speex_echo_capture(am->echo_state, insamples->data[0], &out);
       return ff_filter_samples(ctx->outputs[0], insamples); // Send a buffer of audio samples to the next filter. 
     }
 }
@@ -182,6 +182,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
         av_log(ctx, AV_LOG_ERROR, "Error parsing options: '%s'\n", args);
         return ret;
     }
+    am->frames_ahead = 0;
     am->in = av_calloc(2, sizeof(*am->in));
     if (!am->in)
         return AVERROR(ENOMEM);
