@@ -7,3 +7,14 @@ fix name with amerge
 fix "astreamsync -filter_complex "astreamsync""
 
 fix the -1's?
+
+it shoudl work with a file played against itself..should be perfect...
+
+it shouldn't force 48000 hz...it should receive input as millis prolly :P
+
+the docu should exist and warn that you prolly want astreamsync ...
+
+does astreamsync want/already have "init pos" ?
+
+describe the buffer...maybe move it inline? If I did then...I could...propagate it locally and accept
+arbitrary sized chunks, and in different orders...actually just fixing astreamsync for now might be enough...
