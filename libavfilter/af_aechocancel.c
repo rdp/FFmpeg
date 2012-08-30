@@ -37,8 +37,10 @@ typedef struct {
     const AVClass *class;
     int nb_inputs; // LODO remove
     int num_frames;
-    int route[SWR_CH_MAX]; /**< channels routing, see copy_samples */
+    int frame_size;
+    int route[SWR_CH_MAX]; /**< channels routing, see copy_samples */  //LODO remove
     int bps;
+    int largest_frame;
     SpeexEchoState *echo_state;
     struct aechocancel_input {
         struct FFBufQueue queue;
@@ -53,6 +55,8 @@ typedef struct {
 
 static const AVOption aechocancel_options[] = {
     { "num_frames", "specify the number of samples to buffer", OFFSET(num_frames),
+      AV_OPT_TYPE_INT, { .dbl = 3 }, 2, 1000000, FLAGS },
+    { "frame_size", "specify the size all frames will be in -- use the asetnsamples filter if needed to force this", OFFSET(frame_size),
       AV_OPT_TYPE_INT, { .dbl = 1000 }, 2, 1000000, FLAGS },
     {0}
 };
@@ -111,7 +115,7 @@ static int config_output(AVFilterLink *outlink)
     am->bps = av_get_bytes_per_sample(ctx->outputs[0]->format);
     outlink->sample_rate = ctx->inputs[0]->sample_rate;
     outlink->time_base   = ctx->inputs[0]->time_base;
-    am->echo_state = speex_echo_state_init(am->bps, am->num_frames); // bytes per sample yikes
+    am->echo_state = speex_echo_state_init(am->frame_size, am->num_frames); // bytes per sample yikes
 
     return 0;
 }
@@ -144,18 +148,19 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
             break;
     av_assert0(input_number < 2);
     av_assert0(av_get_bytes_per_sample(insamples->format) == 2);
-
-    // cancel all audio in [1] from [0]
+    if (insamples->audio->nb_samples != am->frame_size) {
+      av_log(ctx, AV_LOG_ERROR, "requested to add %d samples which doesn't match number expected (%d)\n", insamples->audio->nb_samples, am->frame_size);
+      return -1; 
+    }
+    // cancel all audio from [1] remove it from [0]
     if(input_number == 1) {
       // add it to the cancel queue
       av_log(ctx, AV_LOG_ERROR, "adding %d samples to cancel q\n", insamples->audio->nb_samples);
-      for(i = 0; i < insamples->audio->nb_samples; i++)
-        speex_echo_playback(am->echo_state, insamples->data[0] + i*2);
+      speex_echo_playback(am->echo_state, insamples->data[0]);
       return 0; // ok
     } else {
       av_log(ctx, AV_LOG_ERROR, "parsing %d samples to remove it from\n", insamples->audio->nb_samples);
-      for(i = 0; i < insamples->audio->nb_samples; i++)
-        speex_echo_capture(am->echo_state, insamples->data[0] + i*2, insamples->data[0] + i*2);
+      speex_echo_capture(am->echo_state, insamples->data[0], insamples->data[0] + i*2);
       return ff_filter_samples(ctx->outputs[0], insamples); // Send a buffer of audio samples to the next filter. 
     }
 }
