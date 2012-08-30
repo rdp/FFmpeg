@@ -2,18 +2,19 @@ TODO:
   use "real" frames, maybe...make it adjust them up...
     parameter: number of frames
   cleanup
-  rename
+   drain...
+  rename again
   it should *work*
-    it shoudl work with a file played against itself..should be perfect...
+    it should work with a file played against itself..should be perfect...
 
 maybe:
 better pin names
-it shouldn't force 48000 hz...it should receive input as millis prolly :P
 fix name with amerge
 
 I think they can use af_astreamsync to add in their own arbitrary "this one before that one" and it will work including splitting things...
 
 with stereo inputs -> segfault
+  amerge seems to seg fault on error, too
 
 fix "astreamsync -filter_complex "astreamsync""
 

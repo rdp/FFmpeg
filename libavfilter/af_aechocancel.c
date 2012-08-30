@@ -78,13 +78,9 @@ static int query_formats(AVFilterContext *ctx)
     int64_t inlayout[SWR_CH_MAX], outlayout = 0;
     AVFilterFormats *formats;
     AVFilterChannelLayouts *layouts;
-    int i, overlap = 0, nb_ch = 0;
-    //int sample_rates[] = { 44100, -1 };
-
     formats = ff_make_format_list((int[]){ AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_NONE });
     ff_set_common_formats(ctx, formats);
-    //ff_set_common_samplerates(ctx, ff_make_format_list(sample_rates));//f_all_samplerates());
-    ff_set_common_samplerates(ctx, ff_make_format_list(ff_all_samplerates()));
+    ff_set_common_samplerates(ctx, ff_all_samplerates());
     return 0;
 }
 
@@ -112,7 +108,7 @@ static int config_output(AVFilterLink *outlink)
     am->bps = av_get_bytes_per_sample(ctx->outputs[0]->format); // bytes per sample...
     outlink->sample_rate = ctx->inputs[0]->sample_rate;
     outlink->time_base   = ctx->inputs[0]->time_base;
-    int tail_length_samples = am->echo_buffer_millis * outlink->sample_rate / 1000 / am->frame_size;
+    int tail_length_samples = am->echo_buffer_millis * outlink->sample_rate / 1000;
     av_log(ctx, AV_LOG_DEBUG, "using number of samples %d for %d ms at %d hz\n", tail_length_samples, am->echo_buffer_millis, outlink->sample_rate );
     am->echo_state = speex_echo_state_init(am->frame_size, tail_length_samples);
 
@@ -124,7 +120,7 @@ static int request_frame(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AEchoCancelContext *am = ctx->priv;
     int i, ret = 0;
-    if(am->frames_ahead > 4) {
+    if(am->frames_ahead > 2) {
       ret = ff_request_frame(ctx->inputs[0]); // get some more 'extract from' data
     } else {
       ret = ff_request_frame(ctx->inputs[1]); // get some more 'echo cancel' data
@@ -165,6 +161,7 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
       am->frames_ahead--;
       spx_int16_t out[am->frame_size];  
       speex_echo_capture(am->echo_state, insamples->data[0], &out);
+      memcpy(insamples->data[0], &out, 2*insamples->audio->nb_samples);
       return ff_filter_samples(ctx->outputs[0], insamples); // Send a buffer of audio samples to the next filter. 
     }
 }
