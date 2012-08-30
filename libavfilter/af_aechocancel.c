@@ -36,7 +36,7 @@
 typedef struct {
     const AVClass *class;
     int nb_inputs; // LODO remove
-    int num_frames;
+    int echo_buffer_millis;
     int frame_size;
     int route[SWR_CH_MAX]; /**< channels routing, see copy_samples */  //LODO remove
     int bps;
@@ -53,8 +53,8 @@ typedef struct {
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption aechocancel_options[] = {
-    { "num_frames", "specify the number of samples to buffer", OFFSET(num_frames),
-      AV_OPT_TYPE_INT, { .dbl = 3 }, 2, 1000000, FLAGS },
+    { "echo_buffer_millis", "specify the echo buffer in millis", OFFSET(echo_buffer_millis),
+      AV_OPT_TYPE_INT, { .dbl = 150 }, 2, 1000000, FLAGS },
     { "frame_size", "specify the size all frames will be in -- use the asetnsamples filter if needed to force this", OFFSET(frame_size),
       AV_OPT_TYPE_INT, { .dbl = 1000 }, 2, 1000000, FLAGS },
     {0}
@@ -112,10 +112,12 @@ static int config_output(AVFilterLink *outlink)
           av_log(ctx, AV_LOG_ERROR, "Inputs must be mono, not stereo %d\n", nb_channels);
         }
     }
-    am->bps = av_get_bytes_per_sample(ctx->outputs[0]->format);
+    am->bps = av_get_bytes_per_sample(ctx->outputs[0]->format); // bytes per sample...
     outlink->sample_rate = ctx->inputs[0]->sample_rate;
     outlink->time_base   = ctx->inputs[0]->time_base;
-    am->echo_state = speex_echo_state_init(am->frame_size, am->num_frames); // bytes per sample yikes
+    int tail_length_samples = am->echo_buffer_millis * outlink->sample_rate / 1000 / am->frame_size;
+    av_log(ctx, AV_LOG_DEBUG, "using number of samples %d\n", tail_length_samples);
+    am->echo_state = speex_echo_state_init(am->frame_size, tail_length_samples);
 
     return 0;
 }
@@ -125,13 +127,14 @@ static int request_frame(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AEchoCancelContext *am = ctx->priv;
     int i, ret = 0;
-    for (i = 1; i >= 0; i--) {// prefer the feeder guy, though it doesn't help <sigh>
+    for (i = 0; i < 2; i++) { // speex seems to prefer that you start playback first...
        ret = ff_request_frame(ctx->inputs[i]);
        av_log(ctx, AV_LOG_ERROR, "requested from %d got %d\n", i, ret);
        if (ret == AVERROR_EOF) {
-           // ignore
+          // ignore
        } else if (ret < 0) {
-          return ret;
+          // ??
+          // return ret;
        }
     }
     return ret;
@@ -215,7 +218,7 @@ AVFilter avfilter_af_aechocancel = {
         { .name             = "default",
           .type             = AVMEDIA_TYPE_AUDIO,
           .config_props     = config_output,
-         // .request_frame    = request_frame
+          .request_frame    = request_frame
          },
         { .name = NULL }
     },
