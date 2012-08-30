@@ -7,6 +7,7 @@ TODO:
     it shoudl work with a file played against itself..should be perfect...
 
 maybe:
+better pin names
 it shouldn't force 48000 hz...it should receive input as millis prolly :P
 fix name with amerge
 

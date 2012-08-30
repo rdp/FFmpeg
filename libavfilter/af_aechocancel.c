@@ -40,12 +40,11 @@ typedef struct {
     int frame_size;
     int route[SWR_CH_MAX]; /**< channels routing, see copy_samples */  //LODO remove
     int bps;
-    int largest_frame;
     SpeexEchoState *echo_state;
     struct aechocancel_input {
         struct FFBufQueue queue;
         int nb_ch;         /**< number of channels for the input */
-        int nb_samples;
+        //int nb_samples;
         int pos;
     } *in; // an array of them TODO [2]
 } AEchoCancelContext;
@@ -87,7 +86,8 @@ static int query_formats(AVFilterContext *ctx)
 
     formats = ff_make_format_list((int[]){ AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_NONE });
     ff_set_common_formats(ctx, formats);
-    ff_set_common_samplerates(ctx, ff_make_format_list(sample_rates));//f_all_samplerates());
+    //ff_set_common_samplerates(ctx, ff_make_format_list(sample_rates));//f_all_samplerates());
+    ff_set_common_samplerates(ctx, ff_make_format_list(ff_all_samplerates()));
     return 0;
 }
 
@@ -128,6 +128,11 @@ static int request_frame(AVFilterLink *outlink)
     for (i = 1; i >= 0; i--) {// prefer the feeder guy, though it doesn't help <sigh>
        ret = ff_request_frame(ctx->inputs[i]);
        av_log(ctx, AV_LOG_ERROR, "requested from %d got %d\n", i, ret);
+       if (ret == AVERROR_EOF) {
+           // ignore
+       } else if (ret < 0) {
+          return ret;
+       }
     }
     return ret;
 }
@@ -138,7 +143,7 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     AEchoCancelContext *am = ctx->priv;
     AVFilterLink *const outlink = ctx->outputs[0];
     int input_number;
-    int nb_samples, ns, i;
+    int i;
     AVFilterBufferRef *outbuf, *inbuf[SWR_CH_MAX];
     uint8_t *ins[SWR_CH_MAX], *outs;
 
@@ -160,7 +165,8 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
       return 0; // ok
     } else {
       av_log(ctx, AV_LOG_ERROR, "parsing %d samples to remove it from\n", insamples->audio->nb_samples);
-      speex_echo_capture(am->echo_state, insamples->data[0], insamples->data[0] + i*2);
+      spx_int16_t out[am->frame_size];  
+      speex_echo_capture(am->echo_state, insamples->data[0], insamples->data[0]);
       return ff_filter_samples(ctx->outputs[0], insamples); // Send a buffer of audio samples to the next filter. 
     }
 }
@@ -182,9 +188,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     am->in = av_calloc(am->nb_inputs, sizeof(*am->in));
     if (!am->in)
         return AVERROR(ENOMEM);
-    av_log(ctx, AV_LOG_ERROR, "setting names %d\n", am->nb_inputs);
     for (i = 0; i < am->nb_inputs; i++) {
-    av_log(ctx, AV_LOG_ERROR, "setting name %d\n", i);
         snprintf(name, sizeof(name), "in%d", i);
         AVFilterPad pad = {
             .name             = av_strdup(name),
@@ -193,7 +197,6 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
             .min_perms        = AV_PERM_READ | AV_PERM_PRESERVE | AV_PERM_WRITE,
         };
         ff_insert_inpad(ctx, i, &pad);
-    av_log(ctx, AV_LOG_ERROR, "setting name2 %d\n", i);
     }
     return 0;
 }
@@ -212,7 +215,7 @@ AVFilter avfilter_af_aechocancel = {
         { .name             = "default",
           .type             = AVMEDIA_TYPE_AUDIO,
           .config_props     = config_output,
-          .request_frame    = request_frame
+         // .request_frame    = request_frame
          },
         { .name = NULL }
     },
