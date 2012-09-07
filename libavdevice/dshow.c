@@ -278,14 +278,13 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
 
         buf = dup_wchar_to_utf8(var.bstrVal);
 
+        av_log(avctx, pfilter ? AV_LOG_DEBUG : AV_LOG_INFO, " \"%s\"\n", buf);
         if (pfilter) {
             if (strcmp(device_name, buf))
                 goto fail1;
 
             if (!skip--)
                 IMoniker_BindToObject(m, 0, 0, &IID_IBaseFilter, (void *) &device_filter);
-        } else {
-            av_log(avctx, AV_LOG_INFO, " \"%s\"\n", buf);
         }
 
 fail1:
@@ -325,7 +324,7 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
     AM_MEDIA_TYPE *type = NULL;
     int format_set = 0;
     void *caps = NULL;
-    int i, n, size;
+    int i, n, size, log_level;
 
     if (IPin_QueryInterface(pin, &IID_IAMStreamConfig, (void **) &config) != S_OK)
         return;
@@ -347,6 +346,7 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
             VIDEO_STREAM_CONFIG_CAPS *vcaps = caps;
             BITMAPINFOHEADER *bih;
             int64_t *fr;
+            enum PixelFormat pix_fmt = dshow_pixfmt(bih->biCompression, bih->biBitCount);
 #if DSHOWDEBUG
             ff_print_VIDEO_STREAM_CONFIG_CAPS(vcaps);
 #endif
@@ -362,25 +362,30 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
                 goto next;
             }
             if (!pformat_set) {
-                enum PixelFormat pix_fmt = dshow_pixfmt(bih->biCompression, bih->biBitCount);
-                if (pix_fmt == PIX_FMT_NONE) {
-                    enum AVCodecID codec_id = ff_codec_get_id(ff_codec_bmp_tags, bih->biCompression);
-                    AVCodec *codec = avcodec_find_decoder(codec_id);
-                    if (codec_id == AV_CODEC_ID_NONE || !codec) {
-                        av_log(avctx, AV_LOG_INFO, "  unknown compression type 0x%X", (int) bih->biCompression);
-                    } else {
-                        av_log(avctx, AV_LOG_INFO, "  vcodec=%s", codec->name);
-                    }
-                } else {
-                    av_log(avctx, AV_LOG_INFO, "  pixel_format=%s", av_get_pix_fmt_name(pix_fmt));
-                }
-                av_log(avctx, AV_LOG_INFO, "  min s=%ldx%ld fps=%g max s=%ldx%ld fps=%g\n",
-                       vcaps->MinOutputSize.cx, vcaps->MinOutputSize.cy,
-                       1e7 / vcaps->MaxFrameInterval,
-                       vcaps->MaxOutputSize.cx, vcaps->MaxOutputSize.cy,
-                       1e7 / vcaps->MinFrameInterval);
-                continue;
+                log_level = AV_LOG_INFO;
+            } else {
+                log_level = AV_LOG_DEBUG;
             }
+            pix_fmt = dshow_pixfmt(bih->biCompression, bih->biBitCount);
+            if (pix_fmt == PIX_FMT_NONE) {
+                enum AVCodecID codec_id = ff_codec_get_id(ff_codec_bmp_tags, bih->biCompression);
+                AVCodec *codec = avcodec_find_decoder(codec_id);
+                if (codec_id == AV_CODEC_ID_NONE || !codec) {
+                    av_log(avctx, log_level, "  unknown compression type 0x%X", (int) bih->biCompression);
+                } else {
+                    av_log(avctx, log_level, "  vcodec=%s", codec->name);
+                }
+            } else {
+                av_log(avctx, log_level, "  pixel_format=%s", av_get_pix_fmt_name(pix_fmt));
+            }
+            av_log(avctx, log_level, "  min s=%ldx%ld fps=%g max s=%ldx%ld fps=%g\n",
+                   vcaps->MinOutputSize.cx, vcaps->MinOutputSize.cy,
+                   1e7 / vcaps->MaxFrameInterval,
+                   vcaps->MaxOutputSize.cx, vcaps->MaxOutputSize.cy,
+                   1e7 / vcaps->MinFrameInterval);
+            if (!pformat_set)
+                continue;
+
             if (ctx->video_codec_id != AV_CODEC_ID_RAWVIDEO) {
                 if (ctx->video_codec_id != ff_codec_get_id(ff_codec_bmp_tags, bih->biCompression))
                     goto next;
@@ -417,12 +422,11 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
             } else {
                 goto next;
             }
-            if (!pformat_set) {
-                av_log(avctx, AV_LOG_INFO, "  min ch=%lu bits=%lu rate=%6lu max ch=%lu bits=%lu rate=%6lu\n",
-                       acaps->MinimumChannels, acaps->MinimumBitsPerSample, acaps->MinimumSampleFrequency,
-                       acaps->MaximumChannels, acaps->MaximumBitsPerSample, acaps->MaximumSampleFrequency);
-                continue;
-            }
+            av_log(avctx, pformat_set ? AV_LOG_DEBUG : AV_LOG_INFO, "  min ch=%lu bits=%lu rate=%6lu max ch=%lu bits=%lu rate=%6lu\n",
+                   acaps->MinimumChannels, acaps->MinimumBitsPerSample, acaps->MinimumSampleFrequency,
+                   acaps->MaximumChannels, acaps->MaximumBitsPerSample, acaps->MaximumSampleFrequency);
+            if (!pformat_set)
+              continue;
             if (ctx->sample_rate) {
                 if (ctx->sample_rate > acaps->MaximumSampleFrequency ||
                     ctx->sample_rate < acaps->MinimumSampleFrequency)
@@ -546,6 +550,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         AM_MEDIA_TYPE *type;
         GUID category;
         DWORD r2;
+        char *buf;
 
         IPin_QueryPinInfo(pin, &info);
         IBaseFilter_Release(info.pFilter);
@@ -560,10 +565,10 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         if (!IsEqualGUID(&category, &PIN_CATEGORY_CAPTURE))
             goto next;
 
+        buf = dup_wchar_to_utf8(info.achName);
+        av_log(avctx, ppin ? AV_LOG_DEBUG : AV_LOG_INFO, " Pin \"%s\"\n", buf);
+        av_free(buf);
         if (!ppin) {
-            char *buf = dup_wchar_to_utf8(info.achName);
-            av_log(avctx, AV_LOG_INFO, " Pin \"%s\"\n", buf);
-            av_free(buf);
             dshow_cycle_formats(avctx, devtype, pin, NULL);
             goto next;
         }
