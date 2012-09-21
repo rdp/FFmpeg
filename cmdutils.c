@@ -29,6 +29,7 @@
    references to libraries that are not being built. */
 
 #include "config.h"
+#include "compat/va_copy.h"
 #include "libavformat/avformat.h"
 #include "libavfilter/avfilter.h"
 #include "libavdevice/avdevice.h"
@@ -1040,7 +1041,7 @@ int show_filters(void *optctx, const char *opt, const char *arg)
                 *(descr_cur++) = '>';
             }
             pad = i ? (*filter)->outputs : (*filter)->inputs;
-            for (j = 0; pad[j].name; j++) {
+            for (j = 0; pad && pad[j].name; j++) {
                 if (descr_cur >= descr + sizeof(descr) - 4)
                     break;
                 *(descr_cur++) = get_media_type_char(pad[j].type);

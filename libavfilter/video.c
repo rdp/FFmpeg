@@ -249,6 +249,10 @@ int ff_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
 
     FF_TPRINTF_START(NULL, start_frame); ff_tlog_link(NULL, link, 0); ff_tlog(NULL, " "); ff_tlog_ref(NULL, picref, 1);
 
+    av_assert1(picref->format                     == link->format);
+    av_assert1(picref->video->w                   == link->w);
+    av_assert1(picref->video->h                   == link->h);
+
     if (link->closed) {
         avfilter_unref_buffer(picref);
         return AVERROR_EOF;
@@ -406,9 +410,3 @@ int ff_draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
         av_assert1(link->cur_buf_copy->buf->refcount > 0);
     return ret;
 }
-
-int avfilter_default_end_frame(AVFilterLink *inlink)
-{
-    return default_end_frame(inlink);
-}
-

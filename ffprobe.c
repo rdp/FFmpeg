@@ -96,13 +96,14 @@ struct unit_value {
 static char *value_string(char *buf, int buf_size, struct unit_value uv)
 {
     double vald;
+    long long int vali;
     int show_float = 0;
 
     if (uv.unit == unit_second_str) {
         vald = uv.val.d;
         show_float = 1;
     } else {
-        vald = uv.val.i;
+        vald = vali = uv.val.i;
     }
 
     if (uv.unit == unit_second_str && use_value_sexagesimal_format) {
@@ -116,7 +117,6 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
         snprintf(buf, buf_size, "%d:%02d:%09.6f", hours, mins, secs);
     } else {
         const char *prefix_string = "";
-        int l;
 
         if (use_value_prefix && vald > 1) {
             long long int index;
@@ -124,7 +124,7 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
             if (uv.unit == unit_byte_str && use_byte_value_binary_prefix) {
                 index = (long long int) (log2(vald)) / 10;
                 index = av_clip(index, 0, FF_ARRAY_ELEMS(binary_unit_prefixes) - 1);
-                vald /= pow(2, index * 10);
+                vald /= exp2(index * 10);
                 prefix_string = binary_unit_prefixes[index];
             } else {
                 index = (long long int) (log10(vald)) / 3;
@@ -135,10 +135,10 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
         }
 
         if (show_float || (use_value_prefix && vald != (long long int)vald))
-            l = snprintf(buf, buf_size, "%f", vald);
+            snprintf(buf, buf_size, "%f", vald);
         else
-            l = snprintf(buf, buf_size, "%lld", (long long int)vald);
-        snprintf(buf+l, buf_size-l, "%s%s%s", *prefix_string || show_value_unit ? " " : "",
+            snprintf(buf, buf_size, "%lld", vali);
+        av_strlcatf(buf, buf_size, "%s%s%s", *prefix_string || show_value_unit ? " " : "",
                  prefix_string, show_value_unit ? uv.unit : "");
     }
 
@@ -153,6 +153,7 @@ typedef struct WriterContext WriterContext;
 #define WRITER_FLAG_PUT_PACKETS_AND_FRAMES_IN_SAME_CHAPTER 2
 
 typedef struct Writer {
+    const AVClass *priv_class;      ///< private class of the writer, if any
     int priv_size;                  ///< private size for the writer context
     const char *name;
 
@@ -210,6 +211,8 @@ static void writer_close(WriterContext **wctx)
 
     if ((*wctx)->writer->uninit)
         (*wctx)->writer->uninit(*wctx);
+    if ((*wctx)->writer->priv_class)
+        av_opt_free((*wctx)->priv);
     av_freep(&((*wctx)->priv));
     av_freep(wctx);
 }
@@ -231,6 +234,16 @@ static int writer_open(WriterContext **wctx, const Writer *writer,
 
     (*wctx)->class = &writer_class;
     (*wctx)->writer = writer;
+
+    if (writer->priv_class) {
+        void *priv_ctx = (*wctx)->priv;
+        *((const AVClass **)priv_ctx) = writer->priv_class;
+        av_opt_set_defaults(priv_ctx);
+
+        if (args &&
+            (ret = av_set_options_string(priv_ctx, args, "=", ":")) < 0)
+            goto fail;
+    }
     if ((*wctx)->writer->init)
         ret = (*wctx)->writer->init(*wctx, args, opaque);
     if (ret < 0)
@@ -343,7 +356,10 @@ static void writer_print_time(WriterContext *wctx, const char *key,
             writer_print_string(wctx, key, "N/A", 1);
         } else {
             double d = ts * av_q2d(*time_base);
-            value_string(buf, sizeof(buf), (struct unit_value){.val.d=d, .unit=unit_second_str});
+            struct unit_value uv;
+            uv.val.d = d;
+            uv.unit = unit_second_str;
+            value_string(buf, sizeof(buf), uv);
             writer_print_string(wctx, key, buf, 0);
         }
     }
@@ -420,6 +436,17 @@ static const Writer *writer_get_by_name(const char *name)
 
 /* WRITERS */
 
+#define DEFINE_WRITER_CLASS(name)                   \
+static const char *name##_get_name(void *ctx)       \
+{                                                   \
+    return #name ;                                  \
+}                                                   \
+static const AVClass name##_class = {               \
+    #name,                                          \
+    name##_get_name,                                \
+    name##_options                                  \
+}
+
 /* Default output */
 
 typedef struct DefaultContext {
@@ -438,47 +465,7 @@ static const AVOption default_options[] = {
     {NULL},
 };
 
-static const char *default_get_name(void *ctx)
-{
-    return "default";
-}
-
-static const AVClass default_class = {
-    "DefaultContext",
-    default_get_name,
-    default_options
-};
-
-static av_cold int default_init(WriterContext *wctx, const char *args, void *opaque)
-{
-    DefaultContext *def = wctx->priv;
-    int err;
-
-    def->class = &default_class;
-    av_opt_set_defaults(def);
-
-    if (args &&
-        (err = (av_set_options_string(def, args, "=", ":"))) < 0)
-        return err;
-
-    return 0;
-}
-
-static void default_print_footer(WriterContext *wctx)
-{
-    DefaultContext *def = wctx->priv;
-
-    if (!def->noprint_wrappers)
-        printf("\n");
-}
-
-static void default_print_chapter_header(WriterContext *wctx, const char *chapter)
-{
-    DefaultContext *def = wctx->priv;
-
-    if (!def->noprint_wrappers && wctx->nb_chapter)
-        printf("\n");
-}
+DEFINE_WRITER_CLASS(default);
 
 /* lame uppercasing routine, assumes the string is lower case ASCII */
 static inline char *upcase_string(char *dst, size_t dst_size, const char *src)
@@ -495,8 +482,6 @@ static void default_print_section_header(WriterContext *wctx, const char *sectio
     DefaultContext *def = wctx->priv;
     char buf[32];
 
-    if (wctx->nb_section)
-        printf("\n");
     if (!def->noprint_wrappers)
         printf("[%s]\n", upcase_string(buf, sizeof(buf), section));
 }
@@ -507,7 +492,7 @@ static void default_print_section_footer(WriterContext *wctx, const char *sectio
     char buf[32];
 
     if (!def->noprint_wrappers)
-        printf("[/%s]", upcase_string(buf, sizeof(buf), section));
+        printf("[/%s]\n", upcase_string(buf, sizeof(buf), section));
 }
 
 static void default_print_str(WriterContext *wctx, const char *key, const char *value)
@@ -540,15 +525,13 @@ static void default_show_tags(WriterContext *wctx, AVDictionary *dict)
 static const Writer default_writer = {
     .name                  = "default",
     .priv_size             = sizeof(DefaultContext),
-    .init                  = default_init,
-    .print_footer          = default_print_footer,
-    .print_chapter_header  = default_print_chapter_header,
     .print_section_header  = default_print_section_header,
     .print_section_footer  = default_print_section_footer,
     .print_integer         = default_print_int,
     .print_string          = default_print_str,
     .show_tags             = default_show_tags,
     .flags = WRITER_FLAG_DISPLAY_OPTIONAL_FIELDS,
+    .priv_class            = &default_class,
 };
 
 /* Compact output */
@@ -612,6 +595,7 @@ typedef struct CompactContext {
     char *item_sep_str;
     char item_sep;
     int nokey;
+    int print_section;
     char *escape_mode_str;
     const char * (*escape_str)(AVBPrint *dst, const char *src, const char sep, void *log_ctx);
 } CompactContext;
@@ -626,31 +610,17 @@ static const AVOption compact_options[]= {
     {"nk",       "force no key printing", OFFSET(nokey),           AV_OPT_TYPE_INT,    {.i64=0},    0,        1        },
     {"escape",   "set escape mode",       OFFSET(escape_mode_str), AV_OPT_TYPE_STRING, {.str="c"},  CHAR_MIN, CHAR_MAX },
     {"e",        "set escape mode",       OFFSET(escape_mode_str), AV_OPT_TYPE_STRING, {.str="c"},  CHAR_MIN, CHAR_MAX },
+    {"print_section", "print section name", OFFSET(print_section), AV_OPT_TYPE_INT,    {.i64=1},    0,        1        },
+    {"p",             "print section name", OFFSET(print_section), AV_OPT_TYPE_INT,    {.i64=1},    0,        1        },
     {NULL},
 };
 
-static const char *compact_get_name(void *ctx)
-{
-    return "compact";
-}
-
-static const AVClass compact_class = {
-    "CompactContext",
-    compact_get_name,
-    compact_options
-};
+DEFINE_WRITER_CLASS(compact);
 
 static av_cold int compact_init(WriterContext *wctx, const char *args, void *opaque)
 {
     CompactContext *compact = wctx->priv;
-    int err;
 
-    compact->class = &compact_class;
-    av_opt_set_defaults(compact);
-
-    if (args &&
-        (err = (av_set_options_string(compact, args, "=", ":"))) < 0)
-        return err;
     if (strlen(compact->item_sep_str) != 1) {
         av_log(wctx, AV_LOG_ERROR, "Item separator '%s' specified, but must contain a single character\n",
                compact->item_sep_str);
@@ -669,19 +639,12 @@ static av_cold int compact_init(WriterContext *wctx, const char *args, void *opa
     return 0;
 }
 
-static av_cold void compact_uninit(WriterContext *wctx)
-{
-    CompactContext *compact = wctx->priv;
-
-    av_freep(&compact->item_sep_str);
-    av_freep(&compact->escape_mode_str);
-}
-
 static void compact_print_section_header(WriterContext *wctx, const char *section)
 {
     CompactContext *compact = wctx->priv;
 
-    printf("%s%c", section, compact->item_sep);
+    if (compact->print_section)
+        printf("%s%c", section, compact->item_sep);
 }
 
 static void compact_print_section_footer(WriterContext *wctx, const char *section)
@@ -735,33 +698,45 @@ static const Writer compact_writer = {
     .name                 = "compact",
     .priv_size            = sizeof(CompactContext),
     .init                 = compact_init,
-    .uninit               = compact_uninit,
     .print_section_header = compact_print_section_header,
     .print_section_footer = compact_print_section_footer,
     .print_integer        = compact_print_int,
     .print_string         = compact_print_str,
     .show_tags            = compact_show_tags,
     .flags = WRITER_FLAG_DISPLAY_OPTIONAL_FIELDS,
+    .priv_class           = &compact_class,
 };
 
 /* CSV output */
 
-static av_cold int csv_init(WriterContext *wctx, const char *args, void *opaque)
-{
-    return compact_init(wctx, "item_sep=,:nokey=1:escape=csv", opaque);
-}
+#undef OFFSET
+#define OFFSET(x) offsetof(CompactContext, x)
+
+static const AVOption csv_options[] = {
+    {"item_sep", "set item separator",    OFFSET(item_sep_str),    AV_OPT_TYPE_STRING, {.str=","},  CHAR_MIN, CHAR_MAX },
+    {"s",        "set item separator",    OFFSET(item_sep_str),    AV_OPT_TYPE_STRING, {.str=","},  CHAR_MIN, CHAR_MAX },
+    {"nokey",    "force no key printing", OFFSET(nokey),           AV_OPT_TYPE_INT,    {.i64=1},    0,        1        },
+    {"nk",       "force no key printing", OFFSET(nokey),           AV_OPT_TYPE_INT,    {.i64=1},    0,        1        },
+    {"escape",   "set escape mode",       OFFSET(escape_mode_str), AV_OPT_TYPE_STRING, {.str="csv"}, CHAR_MIN, CHAR_MAX },
+    {"e",        "set escape mode",       OFFSET(escape_mode_str), AV_OPT_TYPE_STRING, {.str="csv"}, CHAR_MIN, CHAR_MAX },
+    {"print_section", "print section name", OFFSET(print_section), AV_OPT_TYPE_INT,    {.i64=1},    0,        1        },
+    {"p",             "print section name", OFFSET(print_section), AV_OPT_TYPE_INT,    {.i64=1},    0,        1        },
+    {NULL},
+};
+
+DEFINE_WRITER_CLASS(csv);
 
 static const Writer csv_writer = {
     .name                 = "csv",
     .priv_size            = sizeof(CompactContext),
-    .init                 = csv_init,
-    .uninit               = compact_uninit,
+    .init                 = compact_init,
     .print_section_header = compact_print_section_header,
     .print_section_footer = compact_print_section_footer,
     .print_integer        = compact_print_int,
     .print_string         = compact_print_str,
     .show_tags            = compact_show_tags,
     .flags = WRITER_FLAG_DISPLAY_OPTIONAL_FIELDS,
+    .priv_class           = &csv_class,
 };
 
 /* Flat output */
@@ -785,28 +760,12 @@ static const AVOption flat_options[]= {
     {NULL},
 };
 
-static const char *flat_get_name(void *ctx)
-{
-    return "flat";
-}
-
-static const AVClass flat_class = {
-    "FlatContext",
-    flat_get_name,
-    flat_options
-};
+DEFINE_WRITER_CLASS(flat);
 
 static av_cold int flat_init(WriterContext *wctx, const char *args, void *opaque)
 {
     FlatContext *flat = wctx->priv;
-    int err;
 
-    flat->class = &flat_class;
-    av_opt_set_defaults(flat);
-
-    if (args &&
-        (err = (av_set_options_string(flat, args, "=", ":"))) < 0)
-        return err;
     if (strlen(flat->sep_str) != 1) {
         av_log(wctx, AV_LOG_ERROR, "Item separator '%s' specified, but must contain a single character\n",
                flat->sep_str);
@@ -920,6 +879,7 @@ static const Writer flat_writer = {
     .print_string          = flat_print_str,
     .show_tags             = flat_show_tags,
     .flags = WRITER_FLAG_DISPLAY_OPTIONAL_FIELDS|WRITER_FLAG_PUT_PACKETS_AND_FRAMES_IN_SAME_CHAPTER,
+    .priv_class            = &flat_class,
 };
 
 /* INI format output */
@@ -939,30 +899,14 @@ static const AVOption ini_options[] = {
     {NULL},
 };
 
-static const char *ini_get_name(void *ctx)
-{
-    return "ini";
-}
-
-static const AVClass ini_class = {
-    "INIContext",
-    ini_get_name,
-    ini_options
-};
+DEFINE_WRITER_CLASS(ini);
 
 static av_cold int ini_init(WriterContext *wctx, const char *args, void *opaque)
 {
     INIContext *ini = wctx->priv;
-    int err;
 
     av_bprint_init(&ini->chapter_name, 1, AV_BPRINT_SIZE_UNLIMITED);
     av_bprint_init(&ini->section_name, 1, AV_BPRINT_SIZE_UNLIMITED);
-
-    ini->class = &ini_class;
-    av_opt_set_defaults(ini);
-
-    if (args && (err = av_set_options_string(ini, args, "=", ":")) < 0)
-        return err;
 
     return 0;
 }
@@ -1078,6 +1022,7 @@ static const Writer ini_writer = {
     .print_string          = ini_print_str,
     .show_tags             = ini_show_tags,
     .flags = WRITER_FLAG_DISPLAY_OPTIONAL_FIELDS|WRITER_FLAG_PUT_PACKETS_AND_FRAMES_IN_SAME_CHAPTER,
+    .priv_class            = &ini_class,
 };
 
 /* JSON output */
@@ -1098,28 +1043,11 @@ static const AVOption json_options[]= {
     { NULL }
 };
 
-static const char *json_get_name(void *ctx)
-{
-    return "json";
-}
-
-static const AVClass json_class = {
-    "JSONContext",
-    json_get_name,
-    json_options
-};
+DEFINE_WRITER_CLASS(json);
 
 static av_cold int json_init(WriterContext *wctx, const char *args, void *opaque)
 {
     JSONContext *json = wctx->priv;
-    int err;
-
-    json->class = &json_class;
-    av_opt_set_defaults(json);
-
-    if (args &&
-        (err = (av_set_options_string(json, args, "=", ":"))) < 0)
-        return err;
 
     json->item_sep       = json->compact ? ", " : ",\n";
     json->item_start_end = json->compact ? " "  : "\n";
@@ -1298,6 +1226,7 @@ static const Writer json_writer = {
     .print_string         = json_print_str,
     .show_tags            = json_show_tags,
     .flags = WRITER_FLAG_PUT_PACKETS_AND_FRAMES_IN_SAME_CHAPTER,
+    .priv_class           = &json_class,
 };
 
 /* XML output */
@@ -1321,28 +1250,11 @@ static const AVOption xml_options[] = {
     {NULL},
 };
 
-static const char *xml_get_name(void *ctx)
-{
-    return "xml";
-}
-
-static const AVClass xml_class = {
-    "XMLContext",
-    xml_get_name,
-    xml_options
-};
+DEFINE_WRITER_CLASS(xml);
 
 static av_cold int xml_init(WriterContext *wctx, const char *args, void *opaque)
 {
     XMLContext *xml = wctx->priv;
-    int err;
-
-    xml->class = &xml_class;
-    av_opt_set_defaults(xml);
-
-    if (args &&
-        (err = (av_set_options_string(xml, args, "=", ":"))) < 0)
-        return err;
 
     if (xml->xsd_strict) {
         xml->fully_qualified = 1;
@@ -1511,6 +1423,7 @@ static Writer xml_writer = {
     .print_string         = xml_print_str,
     .show_tags            = xml_show_tags,
     .flags = WRITER_FLAG_PUT_PACKETS_AND_FRAMES_IN_SAME_CHAPTER,
+    .priv_class           = &xml_class,
 };
 
 static void writer_register_all(void)
@@ -1544,8 +1457,13 @@ static void writer_register_all(void)
 #define print_ts(k, v)          writer_print_ts(w, k, v, 0)
 #define print_duration_time(k, v, tb) writer_print_time(w, k, v, tb, 1)
 #define print_duration_ts(k, v)       writer_print_ts(w, k, v, 1)
-#define print_val(k, v, u)      writer_print_string(w, k, \
-    value_string(val_str, sizeof(val_str), (struct unit_value){.val.i = v, .unit=u}), 0)
+#define print_val(k, v, u) do {                                     \
+    struct unit_value uv;                                           \
+    uv.val.i = v;                                                   \
+    uv.unit = u;                                                    \
+    writer_print_string(w, k, value_string(val_str, sizeof(val_str), uv), 0); \
+} while (0)
+
 #define print_section_header(s) writer_print_section_header(w, s)
 #define print_section_footer(s) writer_print_section_footer(w, s)
 #define show_tags(metadata)     writer_show_tags(w, metadata)
@@ -1759,6 +1677,10 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
         print_str("codec_tag_string",    val_str);
         print_fmt("codec_tag", "0x%04x", dec_ctx->codec_tag);
 
+        /* Print useful disposition */
+        print_int("default", !!(stream->disposition & AV_DISPOSITION_DEFAULT));
+        print_int("forced", !!(stream->disposition & AV_DISPOSITION_FORCED));
+
         switch (dec_ctx->codec_type) {
         case AVMEDIA_TYPE_VIDEO:
             print_int("width",        dec_ctx->width);
@@ -1787,6 +1709,8 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
             } else {
                 print_str_opt("timecode", "N/A");
             }
+            print_int("attached_pic",
+                      !!(stream->disposition & AV_DISPOSITION_ATTACHED_PIC));
             break;
 
         case AVMEDIA_TYPE_AUDIO:
@@ -1818,8 +1742,10 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
     print_q("r_frame_rate",   stream->r_frame_rate,   '/');
     print_q("avg_frame_rate", stream->avg_frame_rate, '/');
     print_q("time_base",      stream->time_base,      '/');
-    print_time("start_time",    stream->start_time, &stream->time_base);
-    print_time("duration",      stream->duration,   &stream->time_base);
+    print_ts  ("start_pts",   stream->start_time);
+    print_time("start_time",  stream->start_time, &stream->time_base);
+    print_ts  ("duration_ts", stream->duration);
+    print_time("duration",    stream->duration, &stream->time_base);
     if (dec_ctx->bit_rate > 0) print_val    ("bit_rate", dec_ctx->bit_rate, unit_bit_per_second_str);
     else                       print_str_opt("bit_rate", "N/A");
     if (stream->nb_frames) print_fmt    ("nb_frames", "%"PRId64, stream->nb_frames);

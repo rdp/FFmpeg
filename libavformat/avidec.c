@@ -676,6 +676,10 @@ static int avi_read_header(AVFormatContext *s)
                         st->codec->codec_id  = AV_CODEC_ID_ADPCM_IMA_AMV;
                         ast->dshow_block_align = 0;
                     }
+                    if(st->codec->codec_id == AV_CODEC_ID_AAC && ast->dshow_block_align <= 4 && ast->dshow_block_align) {
+                        av_log(s, AV_LOG_DEBUG, "overriding invalid dshow_block_align of %d\n", ast->dshow_block_align);
+                        ast->dshow_block_align = 0;
+                    }
                     break;
                 case AVMEDIA_TYPE_SUBTITLE:
                     st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
@@ -1341,7 +1345,7 @@ static int guess_ni_flag(AVFormatContext *s){
     if (last_start > first_end)
         return 1;
     idx= av_mallocz(sizeof(*idx) * s->nb_streams);
-    for (min_pos=pos=0; min_pos!=INT64_MAX; pos= min_pos+1) {
+    for (min_pos=pos=0; min_pos!=INT64_MAX; pos= min_pos+1LU) {
         int64_t max_dts = INT64_MIN/2, min_dts= INT64_MAX/2;
         min_pos = INT64_MAX;
 

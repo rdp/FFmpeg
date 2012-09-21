@@ -634,18 +634,17 @@ static int encode_all_blocks(FlashSV2Context * s, int keyframe)
         for (col = 0; col < s->cols; col++) {
             b = s->frame_blocks + (row * s->cols + col);
             prev = s->key_blocks + (row * s->cols + col);
+            b->flags = s->use15_7 ? COLORSPACE_15_7 : 0;
             if (keyframe) {
                 b->start = 0;
                 b->len = b->height;
-                b->flags = s->use15_7 ? COLORSPACE_15_7 : 0;
             } else if (!b->dirty) {
                 b->start = 0;
                 b->len = 0;
                 b->data_size = 0;
-                b->flags = s->use15_7 ? COLORSPACE_15_7 : 0;
                 continue;
-            } else {
-                b->flags = s->use15_7 ? COLORSPACE_15_7 | HAS_DIFF_BLOCKS : HAS_DIFF_BLOCKS;
+            } else if (b->start != 0 || b->len != b->height) {
+                b->flags |= HAS_DIFF_BLOCKS;
             }
             data = s->current_frame + s->image_width * 3 * s->block_height * row + s->block_width * col * 3;
             res = encode_block(s, &s->palette, b, prev, data, s->image_width * 3, s->comp, s->dist, keyframe);
@@ -929,5 +928,4 @@ AVCodec ff_flashsv2_encoder = {
     .close          = flashsv2_encode_end,
     .pix_fmts       = (const enum PixelFormat[]){ PIX_FMT_BGR24, PIX_FMT_NONE },
     .long_name      = NULL_IF_CONFIG_SMALL("Flash Screen Video Version 2"),
-    .capabilities   = CODEC_CAP_EXPERIMENTAL,
 };

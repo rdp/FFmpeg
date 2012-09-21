@@ -455,6 +455,7 @@ enum AVCodecID {
     AV_CODEC_ID_BINTEXT    = MKBETAG('B','T','X','T'),
     AV_CODEC_ID_XBIN       = MKBETAG('X','B','I','N'),
     AV_CODEC_ID_IDF        = MKBETAG( 0 ,'I','D','F'),
+    AV_CODEC_ID_OTF        = MKBETAG( 0 ,'O','T','F'),
 
     AV_CODEC_ID_PROBE = 0x19000, ///< codec_id is not known (like AV_CODEC_ID_NONE) but lavf should attempt to identify it
 
@@ -926,6 +927,16 @@ enum AVPacketSideDataType {
      * @endcode
      */
     AV_PKT_DATA_SKIP_SAMPLES=70,
+
+    /**
+     * An AV_PKT_DATA_JP_DUALMONO side data packet indicates that
+     * the packet may contain "dual mono" audio specific to Japanese DTV
+     * and if it is true, recommends only the selected channel to be used.
+     * @code
+     * u8    selected channels (0=mail/left, 1=sub/right, 2=both)
+     * @endcode
+     */
+    AV_PKT_DATA_JP_DUALMONO,
 };
 
 typedef struct AVPacket {
@@ -3088,6 +3099,8 @@ typedef struct AVProfile {
 
 typedef struct AVCodecDefault AVCodecDefault;
 
+struct AVSubtitle;
+
 /**
  * AVCodec.
  */
@@ -3160,7 +3173,8 @@ typedef struct AVCodec {
     void (*init_static_data)(struct AVCodec *codec);
 
     int (*init)(AVCodecContext *);
-    int (*encode)(AVCodecContext *, uint8_t *buf, int buf_size, void *data);
+    int (*encode_sub)(AVCodecContext *, uint8_t *buf, int buf_size,
+                      const struct AVSubtitle *sub);
     /**
      * Encode data to an AVPacket.
      *
@@ -3606,11 +3620,6 @@ void avsubtitle_free(AVSubtitle *sub);
  * @addtogroup lavc_packet
  * @{
  */
-
-/**
- * @deprecated use NULL instead
- */
-attribute_deprecated void av_destruct_packet_nofree(AVPacket *pkt);
 
 /**
  * Default packet destructor.
