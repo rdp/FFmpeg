@@ -66,6 +66,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     socklen_t optlen;
     char hostname[1024],proto[1024],path[1024];
     char portstr[10];
+    int reuse = 1;
     h->rw_timeout = 5000000;
 
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
@@ -109,12 +110,17 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
  restart:
     ret = AVERROR(EIO);
     fd = socket(cur_ai->ai_family, cur_ai->ai_socktype, cur_ai->ai_protocol);
+    ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &reuse, sizeof(reuse));
+    if (ret < 0) 
+      av_log(h, AV_LOG_ERROR, "unable to set nagle algorithm, ignoring");
+    else
+      av_log(h, AV_LOG_ERROR, "set nagle algorithm");
+    
     if (fd < 0)
         goto fail;
 
     if (s->listen) {
         int fd1;
-        int reuse = 1;
         struct pollfd lp = { fd, POLLIN, 0 };
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
         ret = bind(fd, cur_ai->ai_addr, cur_ai->ai_addrlen);
