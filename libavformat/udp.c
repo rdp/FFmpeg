@@ -39,6 +39,8 @@
 #include "os_support.h"
 #include "url.h"
 
+#undef HAVE_PTHREAD_CANCEL
+
 #if HAVE_PTHREAD_CANCEL
 #include <pthread.h>
 #endif
@@ -730,7 +732,7 @@ static int udp_open(URLContext *h, const char *uri, int flags)
         av_freep(&sources[i]);
     return AVERROR(EIO);
 }
-
+#undef printf
 static int udp_read(URLContext *h, uint8_t *buf, int size)
 {
     UDPContext *s = h->priv_data;
@@ -785,6 +787,7 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
         if (ret < 0)
             return ret;
     }
+    printf("using non pthread code");
     ret = recv(s->udp_fd, buf, size, 0);
 
     return ret < 0 ? ff_neterrno() : ret;

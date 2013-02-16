@@ -591,6 +591,9 @@ static int rtp_parse_packet_internal(RTPDemuxContext *s, AVPacket *pkt,
     /* store the ssrc in the RTPDemuxContext */
     s->ssrc = ssrc;
 
+    av_log(NULL, AV_LOG_ERROR, "RTP: PT=%02x: cseq %d expected=%d, timestamp %u\n",
+          payload_type, seq, ((s->seq + 1) & 0xffff), timestamp);   
+
     /* NOTE: we can handle only one payload type */
     if (s->payload_type != payload_type)
         return -1;
