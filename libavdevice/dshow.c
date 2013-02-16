@@ -203,9 +203,7 @@ callback(void *priv_data, int index, uint8_t *buf, int buf_size, int64_t time)
     struct dshow_ctx *ctx = s->priv_data;
     AVPacketList **ppktl, *pktl_next;
 
-//    dump_videohdr(s, vdhdr);
-
-    WaitForSingleObject(ctx->mutex, INFINITE);
+    WaitForSingleObject(ctx->mutex, INFINITE); // wait if the feeder is messing with the queue currently to send one upstream, wait till it's done
 
     if(shall_we_drop(s))
         goto fail;
@@ -360,10 +358,12 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
                 VIDEOINFOHEADER *v = (void *) type->pbFormat;
                 fr = &v->AvgTimePerFrame;
                 bih = &v->bmiHeader;
+                av_log(avctx, AV_LOG_INFO, " looking at VIH, biSize=%d, BITMAPINFOHEADER size=%d\n", v->bmiHeader.biSize, sizeof(BITMAPINFOHEADER));
             } else if (IsEqualGUID(&type->formattype, &FORMAT_VideoInfo2)) {
                 VIDEOINFOHEADER2 *v = (void *) type->pbFormat;
                 fr = &v->AvgTimePerFrame;
-                bih = &v->bmiHeader;
+                bih = &v->bmiHeader; // biSize is "iteself plus junk"
+                av_log(avctx, AV_LOG_INFO, " looking at VIH2, biSize=%d, BITMAPINFOHEADER size=%d\n", v->bmiHeader.biSize, sizeof(BITMAPINFOHEADER));
             } else {
                 goto next;
             }
