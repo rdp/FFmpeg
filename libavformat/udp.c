@@ -61,6 +61,8 @@ typedef struct {
     int udp_fd;
     int ttl;
     int buffer_size;
+    int interpacket_interval;
+    int64_t last_packet_send_time;
     int is_multicast;
     int local_port;
     int reuse_socket;
@@ -91,6 +93,7 @@ typedef struct {
 #define E AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
 {"buffer_size", "Socket buffer size in bytes", OFFSET(buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, D|E },
+{"wait_between_packets", "Microseconds to wait minimum between packet sends", OFFSET(interpacket_interval), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, D|E },
 {"localport", "Set local port to bind to", OFFSET(local_port), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, D|E },
 {"localaddr", "Choose local IP address", OFFSET(local_addr), AV_OPT_TYPE_STRING, {.str = ""}, 0, 0, D|E },
 {"pkt_size", "Set size of UDP packets", OFFSET(packet_size), AV_OPT_TYPE_INT, {.i64 = 1472}, 0, INT_MAX, D|E },
@@ -570,6 +573,9 @@ static int udp_open(URLContext *h, const char *uri, int flags)
         if (av_find_info_tag(buf, sizeof(buf), "buffer_size", p)) {
             s->buffer_size = strtol(buf, NULL, 10);
         }
+        if (av_find_info_tag(buf, sizeof(buf), "wait_between_packets", p)) {
+            s->interpacket_interval = strtol(buf, NULL, 10);
+        }
         if (av_find_info_tag(buf, sizeof(buf), "connect", p)) {
             s->is_connected = strtol(buf, NULL, 10);
         }
@@ -820,6 +826,14 @@ static int udp_write(URLContext *h, const uint8_t *buf, int size)
         ret = ff_network_wait_fd(s->udp_fd, 1);
         if (ret < 0)
             return ret;
+    }
+    //printf("started as %d\n", s->interpacket_interval);
+    if (s->interpacket_interval > 0) {
+      int64_t current_time = av_gettime();
+      int64_t elapsed_since_last = current_time - s->last_packet_send_time;
+      int64_t to_sleep = s->interpacket_interval - elapsed_since_last;
+      printf(" current time %d, previous time was %d, wanted to sleep %d \n", current_time, s->last_packet_send_time, to_sleep);
+      s->last_packet_send_time = current_time;
     }
 
     if (!s->is_connected) {
