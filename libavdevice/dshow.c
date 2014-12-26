@@ -659,6 +659,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     libAVPin *capture_pin = NULL;
     libAVFilter *capture_filter = NULL;
 	IAMCrossbar *pCrossBar = NULL;
+	ICaptureGraphBuilder2 *graph_builder2 = NULL;	
 	int ret = AVERROR(EIO);
     int r;
 
@@ -701,8 +702,6 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     libAVPin_AddRef(capture_filter->pin);
     capture_pin = capture_filter->pin;
     ctx->capture_pin[devtype] = capture_pin;
-
-	ICaptureGraphBuilder2 *graph_builder2 = NULL;
 	
     r = CoCreateInstance(&CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
                          &IID_ICaptureGraphBuilder2, (void **) &graph_builder2);	
@@ -727,8 +726,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     r = ICaptureGraphBuilder2_FindInterface(graph_builder2, &LOOK_UPSTREAM_ONLY, NULL, 
 		(IBaseFilter *) device_filter, &IID_IAMCrossbar, (void**) &pCrossBar);
     if (r == S_OK) {
-	  DisplayCrossbarInfo(pCrossBar, ctx->video_input_pin, ctx->audio_input_pin);
-	  DisplayCrossbarInfo(pCrossBar, -1, -1);
+	  setup_crossbar_options(pCrossBar, ctx->video_input_pin, ctx->audio_input_pin);
 	  IAMCrossbar_Release(pCrossBar);
 	}
 
