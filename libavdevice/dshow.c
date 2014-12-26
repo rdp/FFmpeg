@@ -716,7 +716,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     }	
 
 	r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) device_pin, NULL /* no intermediate filter */,
-		(IBaseFilter *) capture_filter);
+		(IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
 	
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not RenderStream to connect pins\n");
@@ -726,6 +726,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     r = ICaptureGraphBuilder2_FindInterface(graph_builder2, &LOOK_UPSTREAM_ONLY, NULL, 
 		(IBaseFilter *) device_filter, &IID_IAMCrossbar, (void**) &pCrossBar);
     if (r == S_OK) {
+      /* It found a cross bar device was inserted, optionally configure it */
 	  setup_crossbar_options(pCrossBar, ctx->video_input_pin, ctx->audio_input_pin);
 	  IAMCrossbar_Release(pCrossBar);
 	}
