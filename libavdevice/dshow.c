@@ -40,6 +40,8 @@ struct dshow_ctx {
     int   list_options;
     int   list_devices;
     int   audio_buffer_size;
+	int   video_input_pin;
+	int   audio_input_pin;
 
     IBaseFilter *device_filter[2];
     IPin        *device_pin[2];
@@ -656,7 +658,8 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     IPin *device_pin = NULL;
     libAVPin *capture_pin = NULL;
     libAVFilter *capture_filter = NULL;
-    int ret = AVERROR(EIO);
+	IAMCrossbar *pCrossBar = NULL;
+	int ret = AVERROR(EIO);
     int r;
 
     const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
@@ -678,6 +681,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         ret = r;
         goto error;
     }
+
     ctx->device_pin[devtype] = device_pin;
 
     capture_filter = libAVFilter_Create(avctx, callback, devtype);
@@ -698,15 +702,42 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     capture_pin = capture_filter->pin;
     ctx->capture_pin[devtype] = capture_pin;
 
-    r = IGraphBuilder_ConnectDirect(graph, device_pin, (IPin *) capture_pin, NULL);
-    if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not connect pins\n");
+	ICaptureGraphBuilder2 *graph_builder2 = NULL;
+	
+    r = CoCreateInstance(&CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
+                         &IID_ICaptureGraphBuilder2, (void **) &graph_builder2);	
+	if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not create CaptureGraphBuilder2\n");
         goto error;
     }
+	ICaptureGraphBuilder2_SetFiltergraph(graph_builder2, graph);
+	if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not set graph for CaptureGraphBuilder2\n");
+        goto error;
+    }	
+
+	r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) device_pin, NULL /* no intermediate filter */,
+		(IBaseFilter *) capture_filter);
+	
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not RenderStream to connect pins\n");
+        goto error;
+    }
+
+    r = ICaptureGraphBuilder2_FindInterface(graph_builder2, &LOOK_UPSTREAM_ONLY, NULL, 
+		(IBaseFilter *) device_filter, &IID_IAMCrossbar, (void**) &pCrossBar);
+    if (r == S_OK) {
+	  DisplayCrossbarInfo(pCrossBar, ctx->video_input_pin, ctx->audio_input_pin);
+	  DisplayCrossbarInfo(pCrossBar, -1, -1);
+	  IAMCrossbar_Release(pCrossBar);
+	}
 
     ret = 0;
 
 error:
+    if (graph_builder2 != NULL) 
+        ICaptureGraphBuilder2_Release(graph_builder2);
+
     return ret;
 }
 
@@ -1075,6 +1106,8 @@ static const AVOption options[] = {
     { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "list_options" },
     { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "list_options" },
     { "video_device_number", "set video device number for devices with same name (starts at 0)", OFFSET(video_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "video_input_pin", "set video input pin number for crossbar devices", OFFSET(video_input_pin), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
+    { "audio_input_pin", "set audio input pin number for crossbar devices", OFFSET(audio_input_pin), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
     { "audio_device_number", "set audio device number for devices with same name (starts at 0)", OFFSET(audio_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "audio_buffer_size", "set audio device buffer latency size in milliseconds (default is the device's default)", OFFSET(audio_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { NULL },

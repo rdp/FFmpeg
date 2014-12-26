@@ -277,4 +277,6 @@ long          WINAPI libAVFilter_QueryVendorInfo(libAVFilter *, wchar_t **);
 void                 libAVFilter_Destroy(libAVFilter *);
 libAVFilter         *libAVFilter_Create (void *, void *, enum dshowDeviceType);
 
+void DisplayCrossbarInfo(IAMCrossbar *pXBar, int video_input_pin, int audio_input_pin);
+
 #endif /* AVDEVICE_DSHOW_H */
