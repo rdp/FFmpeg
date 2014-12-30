@@ -46,7 +46,7 @@ void SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_inp
 
         hr = pXBar->get_CrossbarPinInfo(FALSE, i, &lRelated, &lType);
         if (lType == PhysConn_Video_VideoDecoder) {
-			// assume there is only one "Video Decoder", and it's all we care about routing to...for now
+			// assume there is only one "Video (and one Audio) Decoder" output pin, and it's all we care about routing to...for now
 			if (video_input_pin != -1) {
 				printf("routing video input from pin %d\n", video_input_pin);
 				pXBar->Route(i, video_input_pin);
@@ -57,12 +57,12 @@ void SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_inp
 				pXBar->Route(i, audio_input_pin);
 			}
 		} else {
-			printf("unexpected type, please report if you want to use this (%s)", GetPhysicalPinName(lType));
+			printf("unexpected output pin type, please report if you want to use this (%s)", GetPhysicalPinName(lType));
 		}
 
 		hr = pXBar->get_IsRoutedTo(i, &lRouted);
 
-        printf("Output pin %d: %s\n", i, GetPhysicalPinName(lType)); // "Video Decoder"
+        printf("Output pin %d: %s\n", i, GetPhysicalPinName(lType)); // like "Video Decoder"
 		
 
         printf("\tRelated out: %ld, Currently Routed in: %ld\n", lRelated, lRouted);
