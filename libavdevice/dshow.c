@@ -958,6 +958,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             dshow_list_device_options(avctx, devenum, VideoDevice, VideoSourceDevice);
         if (ctx->device_name[AudioDevice]) {
             dshow_list_device_options(avctx, devenum, AudioDevice, AudioSourceDevice);
+			/* show audio options from combined audio/video sources */
             dshow_list_device_options(avctx, devenum, AudioDevice, VideoSourceDevice);
 		}
         ret = AVERROR_EXIT;
