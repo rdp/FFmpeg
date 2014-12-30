@@ -34,7 +34,7 @@ static const char * GetPhysicalPinName(long lType)
 }
 
 
-void SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_input_pin)
+HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_input_pin)
 {
     HRESULT hr;
     long cOutput = -1, cInput = -1;
@@ -49,12 +49,16 @@ void SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_inp
 			// assume there is only one "Video (and one Audio) Decoder" output pin, and it's all we care about routing to...for now
 			if (video_input_pin != -1) {
 				printf("routing video input from pin %d\n", video_input_pin);
-				pXBar->Route(i, video_input_pin);
+				if(pXBar->Route(i, video_input_pin) != S_OK) {
+				  return -1;
+				}
 			}
 		} else if (lType == PhysConn_Audio_AudioDecoder) {
         	if (audio_input_pin != -1) {
 				printf("routing audio input from pin %d\n", audio_input_pin);
-				pXBar->Route(i, audio_input_pin);
+				if(pXBar->Route(i, audio_input_pin) != S_OK) {
+				  return -1;
+				}
 			}
 		} else {
 			printf("unexpected output pin type, please report if you want to use this (%s)", GetPhysicalPinName(lType));
@@ -85,11 +89,12 @@ void SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_inp
         printf("Input pin %d - %s\n", i, GetPhysicalPinName(lType));
         printf("\tRelated in: %ld\n", lRelated);
     }
+	return S_OK;
 }
 
 
 extern "C" {
-	void setup_crossbar_options(IAMCrossbar *pXBar, int video_input_pin, int audio_input_pin) {
-		SetupCrossbarOptions(pXBar, video_input_pin, audio_input_pin);
+	HRESULT setup_crossbar_options(IAMCrossbar *pXBar, int video_input_pin, int audio_input_pin) {
+		return SetupCrossbarOptions(pXBar, video_input_pin, audio_input_pin);
 	}
 }

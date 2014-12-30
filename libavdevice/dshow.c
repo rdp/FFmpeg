@@ -727,8 +727,12 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
 		(IBaseFilter *) device_filter, &IID_IAMCrossbar, (void**) &pCrossBar);
     if (r == S_OK) {
       /* It found a cross bar device was inserted, optionally configure it */
-	  setup_crossbar_options(pCrossBar, ctx->video_input_pin, ctx->audio_input_pin);
+	  r = setup_crossbar_options(pCrossBar, ctx->video_input_pin, ctx->audio_input_pin);
 	  IAMCrossbar_Release(pCrossBar);
+      if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not route crossbar pins\n");
+        goto error;
+      }
 	}
 
     ret = 0;
