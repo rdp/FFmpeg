@@ -307,8 +307,8 @@ fail1:
 
     if (pfilter) {
         if (!device_filter) {
-            av_log(avctx, AV_LOG_ERROR, "Could not find %s device.\n",
-                   devtypename);
+            av_log(avctx, AV_LOG_ERROR, "Could not find %s device with name [%s].\n",
+                   devtypename, device_name);
             return AVERROR(EIO);
         }
         *pfilter = device_filter;
