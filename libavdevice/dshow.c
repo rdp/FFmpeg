@@ -40,8 +40,11 @@ struct dshow_ctx {
     int   list_options;
     int   list_devices;
     int   audio_buffer_size;
-	int   crossbar_video_input_pin_number;
-	int   crossbar_audio_input_pin_number;
+    int   crossbar_video_input_pin_number;
+    int   crossbar_audio_input_pin_number;
+    char *video_pin_name;
+    char *audio_pin_name;;
+
 
     IBaseFilter *device_filter[2];
     IPin        *device_pin[2];
@@ -554,6 +557,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         AM_MEDIA_TYPE *type;
         GUID category;
         DWORD r2;
+        char *buf = NULL;
 
         IPin_QueryPinInfo(pin, &info);
         IBaseFilter_Release(info.pFilter);
@@ -569,12 +573,27 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
             goto next;
 
         if (!ppin) {
-            char *buf = dup_wchar_to_utf8(info.achName);
+            buf = dup_wchar_to_utf8(info.achName);
             av_log(avctx, AV_LOG_INFO, " Pin \"%s\"\n", buf);
-            av_free(buf);
             dshow_cycle_formats(avctx, devtype, pin, NULL);
             goto next;
         }
+
+        if (devtype == VideoDevice && ctx->video_pin_name) {
+            buf = dup_wchar_to_utf8(info.achName);
+            if(!strcmp(buf, ctx->video_pin_name)) {
+                av_log(avctx, AV_LOG_DEBUG, "skipping pin %s != requested [%s]\n", buf, ctx->video_pin_name); 
+                goto next;
+            }
+        }
+        if (devtype == AudioDevice && ctx->audio_pin_name) {
+            buf = dup_wchar_to_utf8(info.achName);
+            if(!strcmp(buf, ctx->audio_pin_name)) {
+                av_log(avctx, AV_LOG_DEBUG, "skipping pin %s != requested [%s]\n", buf, ctx->audio_pin_name); 
+                goto next;
+            }
+        }
+
         if (set_format) {
             dshow_cycle_formats(avctx, devtype, pin, &format_set);
             if (!format_set) {
@@ -606,6 +625,8 @@ next:
             IKsPropertySet_Release(p);
         if (device_pin != pin)
             IPin_Release(pin);
+        if (buf)
+          av_free(buf);
     }
 
     IEnumPins_Release(pins);
@@ -1116,6 +1137,8 @@ static const AVOption options[] = {
     { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "list_options" },
     { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "list_options" },
     { "video_device_number", "set video device number for devices with same name (starts at 0)", OFFSET(video_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "video_pin_name", "select video capture pin by name", OFFSET(video_pin_name),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0, AV_OPT_FLAG_ENCODING_PARAM },
+    { "audio_pin_name", "select audio capture pin by name", OFFSET(audio_pin_name),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0, AV_OPT_FLAG_ENCODING_PARAM },
     { "crossbar_video_input_pin_number", "set video input pin number for crossbar devices", OFFSET(crossbar_video_input_pin_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
     { "crossbar_audio_input_pin_number", "set audio input pin number for crossbar devices", OFFSET(crossbar_audio_input_pin_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
     { "audio_device_number", "set audio device number for devices with same name (starts at 0)", OFFSET(audio_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
