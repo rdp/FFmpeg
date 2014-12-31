@@ -264,7 +264,7 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
     r = ICreateDevEnum_CreateClassEnumerator(devenum, device_guid[sourcetype],
                                              (IEnumMoniker **) &classenum, 0);
     if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not enumerate %s devices.\n",
+        av_log(avctx, AV_LOG_ERROR, "Could not enumerate %s devices (or none found).\n",
                devtypename);
         return AVERROR(EIO);
     }
