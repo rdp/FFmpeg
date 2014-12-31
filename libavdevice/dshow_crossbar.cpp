@@ -43,6 +43,7 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
     long cOutput = -1, cInput = -1;
     hr = pXBar->get_PinCounts(&cOutput, &cInput);
 	int i;
+	printf("CrossBar Information:\n");
     for (i = 0; i < cOutput; i++)
     {
         long lRelated = -1, lType = -1, lRouted = -1;
