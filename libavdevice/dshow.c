@@ -581,14 +581,14 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
 
         if (devtype == VideoDevice && ctx->video_pin_name) {
             buf = dup_wchar_to_utf8(info.achName);
-            if(!strcmp(buf, ctx->video_pin_name)) {
+            if(strcmp(buf, ctx->video_pin_name)) {
                 av_log(avctx, AV_LOG_DEBUG, "skipping pin %s != requested [%s]\n", buf, ctx->video_pin_name); 
                 goto next;
             }
         }
         if (devtype == AudioDevice && ctx->audio_pin_name) {
             buf = dup_wchar_to_utf8(info.achName);
-            if(!strcmp(buf, ctx->audio_pin_name)) {
+            if(strcmp(buf, ctx->audio_pin_name)) {
                 av_log(avctx, AV_LOG_DEBUG, "skipping pin %s != requested [%s]\n", buf, ctx->audio_pin_name); 
                 goto next;
             }
