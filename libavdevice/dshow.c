@@ -40,8 +40,8 @@ struct dshow_ctx {
     int   list_options;
     int   list_devices;
     int   audio_buffer_size;
-    int   crossbar_video_input_pin_number;
-    int   crossbar_audio_input_pin_number;
+    int   crossbar_video_input_number;
+    int   crossbar_audio_input_number;
     char *video_pin_name;
     char *audio_pin_name;;
 
@@ -744,7 +744,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         goto error;
     }
 
-    r = setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_pin_number, ctx->crossbar_audio_input_pin_number);
+    r = setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_number, ctx->crossbar_audio_input_number);
 
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not setup CrossBar\n");
@@ -1136,8 +1136,8 @@ static const AVOption options[] = {
     { "video_device_number", "set video device number for devices with same name (starts at 0)", OFFSET(video_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "video_pin_name", "select video capture pin by name", OFFSET(video_pin_name),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0, AV_OPT_FLAG_ENCODING_PARAM },
     { "audio_pin_name", "select audio capture pin by name", OFFSET(audio_pin_name),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0, AV_OPT_FLAG_ENCODING_PARAM },
-    { "crossbar_video_input_pin_number", "set video input pin number for crossbar devices", OFFSET(crossbar_video_input_pin_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
-    { "crossbar_audio_input_pin_number", "set audio input pin number for crossbar devices", OFFSET(crossbar_audio_input_pin_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
+    { "crossbar_video_input_number", "set video input pin number for crossbar devices", OFFSET(crossbar_video_input_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
+    { "crossbar_audio_input_number", "set audio input pin number for crossbar devices", OFFSET(crossbar_audio_input_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
     { "audio_device_number", "set audio device number for devices with same name (starts at 0)", OFFSET(audio_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "audio_buffer_size", "set audio device buffer latency size in milliseconds (default is the device's default)", OFFSET(audio_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { NULL },
