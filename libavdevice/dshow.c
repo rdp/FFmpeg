@@ -679,9 +679,8 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     IPin *device_pin = NULL;
     libAVPin *capture_pin = NULL;
     libAVFilter *capture_filter = NULL;
-	IAMCrossbar *pCrossBar = NULL;
-	ICaptureGraphBuilder2 *graph_builder2 = NULL;	
-	int ret = AVERROR(EIO);
+    ICaptureGraphBuilder2 *graph_builder2 = NULL;	
+    int ret = AVERROR(EIO);
     int r;
 
     const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
@@ -736,7 +735,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         goto error;
     }	
 
-	r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) device_pin, NULL /* no intermediate filter */,
+    r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) device_pin, NULL /* no intermediate filter */,
 		(IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
 	
     if (r != S_OK) {
@@ -744,17 +743,12 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         goto error;
     }
 
-    r = ICaptureGraphBuilder2_FindInterface(graph_builder2, &LOOK_UPSTREAM_ONLY, NULL, 
-		(IBaseFilter *) device_filter, &IID_IAMCrossbar, (void**) &pCrossBar);
-    if (r == S_OK) {
-      /* It found a cross bar device was inserted, optionally configure it */
-	  r = setup_crossbar_options(pCrossBar, ctx->crossbar_video_input_pin_number, ctx->crossbar_audio_input_pin_number);
-	  IAMCrossbar_Release(pCrossBar);
-      if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not route crossbar pins\n");
+    r = setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_pin_number, ctx->crossbar_audio_input_pin_number);
+
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not setup CrossBar\n");
         goto error;
-      }
-	}
+    }
 
     ret = 0;
 
