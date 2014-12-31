@@ -263,6 +263,7 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
     const GUID *device_guid[2] = { &CLSID_VideoInputDeviceCategory,
                                    &CLSID_AudioInputDeviceCategory };
     const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
+    const char *sourcetypename = (sourcetype == VideoSourceDevice) ? "video" : "audio";
 
     r = ICreateDevEnum_CreateClassEnumerator(devenum, device_guid[sourcetype],
                                              (IEnumMoniker **) &classenum, 0);
@@ -310,8 +311,8 @@ fail1:
 
     if (pfilter) {
         if (!device_filter) {
-            av_log(avctx, AV_LOG_ERROR, "Could not find %s device with name [%s].\n",
-                   devtypename, device_name);
+            av_log(avctx, AV_LOG_ERROR, "Could not find %s device with name [%s] among devices of type %s.\n",
+                   devtypename, device_name, sourcetypename);
             return AVERROR(EIO);
         }
         *pfilter = device_filter;
@@ -979,7 +980,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             dshow_list_device_options(avctx, devenum, AudioDevice, AudioSourceDevice);
 			/* show audio options from combined audio/video sources */
             dshow_list_device_options(avctx, devenum, AudioDevice, VideoSourceDevice);
-	}
+	    }
     }
     if (ctx->device_name[VideoDevice]) {
         if ((r = dshow_open_device(avctx, devenum, VideoDevice, VideoSourceDevice)) < 0 ||
