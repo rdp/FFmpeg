@@ -979,11 +979,8 @@ static int dshow_read_header(AVFormatContext *avctx)
             dshow_list_device_options(avctx, devenum, AudioDevice, AudioSourceDevice);
 			/* show audio options from combined audio/video sources */
             dshow_list_device_options(avctx, devenum, AudioDevice, VideoSourceDevice);
-		}
-        ret = AVERROR_EXIT;
-        goto error;
+	}
     }
-
     if (ctx->device_name[VideoDevice]) {
         if ((r = dshow_open_device(avctx, devenum, VideoDevice, VideoSourceDevice)) < 0 ||
             (r = dshow_add_device(avctx, VideoDevice)) < 0) {
@@ -1001,6 +998,11 @@ static int dshow_read_header(AVFormatContext *avctx)
                 goto error;
             }
         }
+    }
+    if (ctx->list_options) {
+        /* allow it to list dshow crossbar options in dshow_open_device */
+        ret = AVERROR_EXIT;
+        goto error;
     }
     ctx->curbufsize[0] = 0;
     ctx->curbufsize[1] = 0;
