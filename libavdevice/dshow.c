@@ -966,7 +966,7 @@ static int dshow_read_header(AVFormatContext *avctx)
     }
 
     if (ctx->list_devices) {
-        av_log(avctx, AV_LOG_INFO, "DirectShow video (and video+audio combined) devices\n");
+        av_log(avctx, AV_LOG_INFO, "DirectShow video (and video+audio combo) devices\n");
         dshow_cycle_devices(avctx, devenum, VideoDevice, VideoSourceDevice, NULL);
         av_log(avctx, AV_LOG_INFO, "DirectShow audio devices\n");
         dshow_cycle_devices(avctx, devenum, AudioDevice, AudioSourceDevice, NULL);
