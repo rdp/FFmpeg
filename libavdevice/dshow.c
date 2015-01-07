@@ -275,9 +275,32 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
 
     while (!device_filter && IEnumMoniker_Next(classenum, 1, &m, NULL) == S_OK) {
         IPropertyBag *bag = NULL;
-        char *buf = NULL;
+        char *friendly_name = NULL;
+        char *display_name = NULL;
         VARIANT var;
-
+        IBindCtx *bind_ctx;
+        LPOLESTR olestr;
+        LPMALLOC ppMalloc;
+        int i;
+        
+        r = CreateBindCtx(0, &bind_ctx);
+        if (r == S_OK) {
+            /* GetDisplayname works for both video and audio DevicePath doesn't */
+            r = IMoniker_GetDisplayName(m, bind_ctx, NULL, &olestr);
+            if (r == S_OK) {
+                display_name = dup_wchar_to_utf8(olestr);
+                /* replace : with _ since we use : to differentiate between sources*/
+                for (i = 0; i < strlen(display_name); i++) {
+                    if (display_name[i] == ':')
+                        display_name[i] = '_';  
+                }
+                r = CoGetMalloc(1, &ppMalloc);
+                if (r == S_OK)
+                  IMalloc_Free(ppMalloc, olestr);
+            }
+            IBindCtx_Release(bind_ctx);
+        }
+            
         r = IMoniker_BindToStorage(m, 0, 0, &IID_IPropertyBag, (void *) &bag);
         if (r != S_OK)
             goto fail1;
@@ -286,21 +309,24 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
         r = IPropertyBag_Read(bag, L"FriendlyName", &var, NULL);
         if (r != S_OK)
             goto fail1;
-
-        buf = dup_wchar_to_utf8(var.bstrVal);
+        friendly_name = dup_wchar_to_utf8(var.bstrVal);
 
         if (pfilter) {
-            if (strcmp(device_name, buf))
+            if (strcmp(device_name, friendly_name) && !(display_name || strcmp(device_name, display_name)))
                 goto fail1;
 
             if (!skip--)
                 IMoniker_BindToObject(m, 0, 0, &IID_IBaseFilter, (void *) &device_filter);
         } else {
-            av_log(avctx, AV_LOG_INFO, " \"%s\"\n", buf);
+            if (display_name)
+                av_log(avctx, AV_LOG_INFO, " \"%s\" (alternate name \"%s\")\n", friendly_name, display_name);
+            else
+                av_log(avctx, AV_LOG_INFO, " \"%s\"\n", friendly_name);
         }
 
 fail1:
-        av_free(buf);
+        av_free(friendly_name);
+        av_free(display_name);
         if (bag)
             IPropertyBag_Release(bag);
         IMoniker_Release(m);
