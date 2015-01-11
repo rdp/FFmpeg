@@ -372,8 +372,9 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
         goto end;
 
     for (i = 0; i < n && !format_set; i++) {
-        IAMStreamConfig_GetStreamCaps(config, i, &type, (void *) caps);
-
+        r = IAMStreamConfig_GetStreamCaps(config, i, &type, (void *) caps);
+        if (r != S_OK)
+            goto next;
 #if DSHOWDEBUG
         ff_print_AM_MEDIA_TYPE(type);
 #endif
@@ -546,7 +547,7 @@ end:
  */
 static int
 dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
-                 IBaseFilter *device_filter, IPin **ppin)
+                 enum dshowSourceFilterType sourcetype, IBaseFilter *device_filter, IPin **ppin)
 {
     struct dshow_ctx *ctx = avctx->priv_data;
     IEnumPins *pins = 0;
@@ -556,6 +557,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
 
     const GUID *mediatype[2] = { &MEDIATYPE_Video, &MEDIATYPE_Audio };
     const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
+    const char *sourcetypename = (sourcetype == VideoSourceDevice) ? "video" : "audio";
 
     int set_format = (devtype == VideoDevice && (ctx->framerate ||
                                                 (ctx->requested_width && ctx->requested_height) ||
@@ -571,8 +573,8 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     }
 
     if (!ppin) {
-        av_log(avctx, AV_LOG_INFO, "DirectShow %s device options\n",
-               devtypename);
+        av_log(avctx, AV_LOG_INFO, "DirectShow %s device options (from %s source devices)\n",
+               devtypename, sourcetypename);
     }
     while (!device_pin && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
         IKsPropertySet *p = NULL;
@@ -581,8 +583,11 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         AM_MEDIA_TYPE *type;
         GUID category;
         DWORD r2;
-        char *buf = NULL;
-
+        char *name_buf = NULL;
+        wchar_t *pin_id = NULL;
+        char *pin_buf = NULL;
+        char *desired_pin_name = devtype == VideoDevice ? ctx->video_pin_name : ctx->audio_pin_name;
+    
         IPin_QueryPinInfo(pin, &info);
         IBaseFilter_Release(info.pFilter);
 
@@ -595,25 +600,25 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
             goto next;
         if (!IsEqualGUID(&category, &PIN_CATEGORY_CAPTURE))
             goto next;
+        name_buf = dup_wchar_to_utf8(info.achName);
+
+        r = IPin_QueryId(pin, &pin_id);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not query pin id\n");
+            return AVERROR(EIO);
+        }
+        pin_buf = dup_wchar_to_utf8(pin_id);
 
         if (!ppin) {
-            buf = dup_wchar_to_utf8(info.achName);
-            av_log(avctx, AV_LOG_INFO, " Pin \"%s\"\n", buf);
+            av_log(avctx, AV_LOG_INFO, " Pin \"%s\" alternative name \"%s\"\n", name_buf, pin_buf);
             dshow_cycle_formats(avctx, devtype, pin, NULL);
             goto next;
         }
-
-        if (devtype == VideoDevice && ctx->video_pin_name) {
-            buf = dup_wchar_to_utf8(info.achName);
-            if(strcmp(buf, ctx->video_pin_name)) {
-                av_log(avctx, AV_LOG_DEBUG, "skipping pin %s != requested [%s]\n", buf, ctx->video_pin_name); 
-                goto next;
-            }
-        }
-        if (devtype == AudioDevice && ctx->audio_pin_name) {
-            buf = dup_wchar_to_utf8(info.achName);
-            if(strcmp(buf, ctx->audio_pin_name)) {
-                av_log(avctx, AV_LOG_DEBUG, "skipping pin %s != requested [%s]\n", buf, ctx->audio_pin_name); 
+        
+        if (desired_pin_name) {
+            if(strcmp(name_buf, desired_pin_name) && strcmp(pin_buf, desired_pin_name)) {
+                av_log(avctx, AV_LOG_DEBUG, "skipping pin \"%s\" (\"%s\") != requested \"%s\"\n", 
+                    name_buf, pin_buf, desired_pin_name); 
                 goto next;
             }
         }
@@ -634,9 +639,11 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
             goto next;
 
         IEnumMediaTypes_Reset(types);
+        /* in case format_set was not called, just verify the majortype */
         while (!device_pin && IEnumMediaTypes_Next(types, 1, &type, NULL) == S_OK) {
             if (IsEqualGUID(&type->majortype, mediatype[devtype])) {
                 device_pin = pin;
+                av_log(avctx, AV_LOG_DEBUG, "Selecting pin %s on %s\n", name_buf, devtypename);
                 goto next;
             }
             CoTaskMemFree(type);
@@ -649,8 +656,12 @@ next:
             IKsPropertySet_Release(p);
         if (device_pin != pin)
             IPin_Release(pin);
-        if (buf)
-          av_free(buf);
+        if (name_buf)
+            av_free(name_buf);
+        if (pin_buf)
+            av_free(pin_buf);
+        if (pin_id)
+            CoTaskMemFree(pin_id);
     }
 
     IEnumPins_Release(pins);
@@ -687,7 +698,7 @@ dshow_list_device_options(AVFormatContext *avctx, ICreateDevEnum *devenum,
     if ((r = dshow_cycle_devices(avctx, devenum, devtype, sourcetype, &device_filter)) < 0)
         return r;
     ctx->device_filter[devtype] = device_filter;
-    if ((r = dshow_cycle_pins(avctx, devtype, device_filter, NULL)) < 0)
+    if ((r = dshow_cycle_pins(avctx, devtype, sourcetype, device_filter, NULL)) < 0)
         return r;
 
     return 0;
@@ -722,7 +733,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         goto error;
     }
 
-    if ((r = dshow_cycle_pins(avctx, devtype, device_filter, &device_pin)) < 0) {
+    if ((r = dshow_cycle_pins(avctx, devtype, sourcetype, device_filter, &device_pin)) < 0) {
         ret = r;
         goto error;
     }
@@ -998,12 +1009,19 @@ static int dshow_read_header(AVFormatContext *avctx)
     }
     if (ctx->list_options) {
         if (ctx->device_name[VideoDevice])
-            dshow_list_device_options(avctx, devenum, VideoDevice, VideoSourceDevice);
+            if ((r = dshow_list_device_options(avctx, devenum, VideoDevice, VideoSourceDevice))) {
+                ret = r;
+                goto error;
+            }
         if (ctx->device_name[AudioDevice]) {
-            dshow_list_device_options(avctx, devenum, AudioDevice, AudioSourceDevice);
-			/* show audio options from combined audio/video sources */
-            dshow_list_device_options(avctx, devenum, AudioDevice, VideoSourceDevice);
-	    }
+            if (dshow_list_device_options(avctx, devenum, AudioDevice, AudioSourceDevice)) {
+                /* show audio options from combined video+audio sources as fallback */
+                if ((r = dshow_list_device_options(avctx, devenum, AudioDevice, VideoSourceDevice))) {
+                    ret = r;
+                    goto error;
+                }
+            }
+        }
     }
     if (ctx->device_name[VideoDevice]) {
         if ((r = dshow_open_device(avctx, devenum, VideoDevice, VideoSourceDevice)) < 0 ||
@@ -1015,10 +1033,10 @@ static int dshow_read_header(AVFormatContext *avctx)
     if (ctx->device_name[AudioDevice]) {
         if ((r = dshow_open_device(avctx, devenum, AudioDevice, AudioSourceDevice)) < 0 ||
             (r = dshow_add_device(avctx, AudioDevice)) < 0) {
-			/* see if there's a video source with an audio pin with the given audio name */
+            /* see if there's a video source with an audio pin with the given audio name */
             if ((r = dshow_open_device(avctx, devenum, AudioDevice, VideoSourceDevice)) < 0 ||
                 (r = dshow_add_device(avctx, AudioDevice)) < 0) {
-	            ret = r;
+                ret = r;
                 goto error;
             }
         }
