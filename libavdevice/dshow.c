@@ -360,7 +360,7 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
     AM_MEDIA_TYPE *type = NULL;
     int format_set = 0;
     void *caps = NULL;
-    int i, n, size;
+    int i, n, size, r;
 
     if (IPin_QueryInterface(pin, &IID_IAMStreamConfig, (void **) &config) != S_OK)
         return;
