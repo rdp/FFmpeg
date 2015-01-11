@@ -312,21 +312,21 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
         friendly_name = dup_wchar_to_utf8(var.bstrVal);
 
         if (pfilter) {
-            if (strcmp(device_name, friendly_name) && !(display_name || strcmp(device_name, display_name)))
+            if (strcmp(device_name, friendly_name) && strcmp(device_name, unique_name))
                 goto fail1;
 
             if (!skip--)
                 IMoniker_BindToObject(m, 0, 0, &IID_IBaseFilter, (void *) &device_filter);
-        } else {
-            if (display_name)
-                av_log(avctx, AV_LOG_INFO, " \"%s\" (alternate name \"%s\")\n", friendly_name, display_name);
-            else
-                av_log(avctx, AV_LOG_INFO, " \"%s\"\n", friendly_name);
-        }
+        } else
+            av_log(avctx, AV_LOG_INFO, " \"%s\" alternative name \"%s\"\n", friendly_name, unique_name);
 
 fail1:
+        if (olestr && ppMalloc)
+            IMalloc_Free(ppMalloc, olestr);
+        if (bind_ctx)
+            IBindCtx_Release(bind_ctx);        
         av_free(friendly_name);
-        av_free(display_name);
+        av_free(unique_name);
         if (bag)
             IPropertyBag_Release(bag);
         IMoniker_Release(m);
