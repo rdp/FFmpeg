@@ -276,29 +276,28 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
     while (!device_filter && IEnumMoniker_Next(classenum, 1, &m, NULL) == S_OK) {
         IPropertyBag *bag = NULL;
         char *friendly_name = NULL;
-        char *display_name = NULL;
+        char *unique_name = NULL;
         VARIANT var;
-        IBindCtx *bind_ctx;
-        LPOLESTR olestr;
-        LPMALLOC ppMalloc;
+        IBindCtx *bind_ctx = NULL;
+        LPOLESTR olestr = NULL;
+        LPMALLOC ppMalloc = NULL;
         int i;
         
+        r = CoGetMalloc(1, &ppMalloc);
+        if (r = S_OK)
+            goto fail1;
         r = CreateBindCtx(0, &bind_ctx);
-        if (r == S_OK) {
-            /* GetDisplayname works for both video and audio DevicePath doesn't */
-            r = IMoniker_GetDisplayName(m, bind_ctx, NULL, &olestr);
-            if (r == S_OK) {
-                display_name = dup_wchar_to_utf8(olestr);
-                /* replace : with _ since we use : to differentiate between sources*/
-                for (i = 0; i < strlen(display_name); i++) {
-                    if (display_name[i] == ':')
-                        display_name[i] = '_';  
-                }
-                r = CoGetMalloc(1, &ppMalloc);
-                if (r == S_OK)
-                  IMalloc_Free(ppMalloc, olestr);
-            }
-            IBindCtx_Release(bind_ctx);
+        if (r != S_OK)
+            goto fail1;
+        /* GetDisplayname works for both video and audio, DevicePath doesn't */
+        r = IMoniker_GetDisplayName(m, bind_ctx, NULL, &olestr);
+        if (r != S_OK)
+            goto fail1;
+        unique_name = dup_wchar_to_utf8(olestr);
+        /* replace ':' with '_' since we use : to differentiate between sources */
+        for (i = 0; i < strlen(unique_name); i++) {
+            if (unique_name[i] == ':')
+                unique_name[i] = '_';  
         }
             
         r = IMoniker_BindToStorage(m, 0, 0, &IID_IPropertyBag, (void *) &bag);
