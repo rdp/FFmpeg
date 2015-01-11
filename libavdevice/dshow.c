@@ -294,7 +294,7 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
         if (r != S_OK)
             goto fail1;
         unique_name = dup_wchar_to_utf8(olestr);
-        /* replace ':' with '_' since we use : to differentiate between sources */
+        /* replace ':' with '_' since we use : to delineate between sources */
         for (i = 0; i < strlen(unique_name); i++) {
             if (unique_name[i] == ':')
                 unique_name[i] = '_';  
@@ -311,11 +311,17 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
         friendly_name = dup_wchar_to_utf8(var.bstrVal);
 
         if (pfilter) {
+            printf("comparing %s %s %s %d\n", device_name, friendly_name, unique_name, strcmp(device_name, friendly_name));
             if (strcmp(device_name, friendly_name) && strcmp(device_name, unique_name))
                 goto fail1;
 
-            if (!skip--)
-                IMoniker_BindToObject(m, 0, 0, &IID_IBaseFilter, (void *) &device_filter);
+            if (!skip--) {
+                r = IMoniker_BindToObject(m, 0, 0, &IID_IBaseFilter, (void *) &device_filter);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Unable to BindToObject for %s\n", device_name);
+                    goto fail1;
+                }
+            }
         } else
             av_log(avctx, AV_LOG_INFO, " \"%s\" (alternative name \"%s\")\n", friendly_name, unique_name);
 
