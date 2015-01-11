@@ -37,13 +37,13 @@ static const char * GetPhysicalPinName(long lType)
 }
 
 
-HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_input_pin)
+HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_input_pin, const char *device_name)
 {
     HRESULT hr;
     long cOutput = -1, cInput = -1;
     hr = pXBar->get_PinCounts(&cOutput, &cInput);
-	int i;
-	printf("CrossBar Information:\n");
+    int i;
+    printf("CrossBar Information for %s:\n", device_name);
     for (i = 0; i < cOutput; i++)
     {
         long lRelated = -1, lType = -1, lRouted = -1;
@@ -99,15 +99,16 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
 
 
 extern "C" {
-    HRESULT setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFilter *device_filter, int crossbar_video_input_pin_number, 
-    int crossbar_audio_input_pin_number) {
+    HRESULT setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFilter *device_filter, 
+        int crossbar_video_input_pin_number, int crossbar_audio_input_pin_number, const char *device_name) {
         IAMCrossbar *pCrossBar = NULL;
         HRESULT r;
         r = graph_builder2->FindInterface(&LOOK_UPSTREAM_ONLY, (const GUID *) NULL,
                 (IBaseFilter *) device_filter, IID_IAMCrossbar, (void**) &pCrossBar);
         if (r == S_OK) {
             /* It found a cross bar device was inserted, optionally configure it */
-            r = SetupCrossbarOptions(pCrossBar, crossbar_video_input_pin_number, crossbar_audio_input_pin_number);
+            r = SetupCrossbarOptions(pCrossBar, crossbar_video_input_pin_number, 
+                crossbar_audio_input_pin_number, device_name);
             pCrossBar->Release();
         } else {
             /* no crossbar to setup */

@@ -317,7 +317,7 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
             if (!skip--)
                 IMoniker_BindToObject(m, 0, 0, &IID_IBaseFilter, (void *) &device_filter);
         } else
-            av_log(avctx, AV_LOG_INFO, " \"%s\" alternative name \"%s\"\n", friendly_name, unique_name);
+            av_log(avctx, AV_LOG_INFO, " \"%s\" (alternative name \"%s\")\n", friendly_name, unique_name);
 
 fail1:
         if (olestr && ppMalloc)
@@ -610,7 +610,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         pin_buf = dup_wchar_to_utf8(pin_id);
 
         if (!ppin) {
-            av_log(avctx, AV_LOG_INFO, " Pin \"%s\" alternative name \"%s\"\n", name_buf, pin_buf);
+            av_log(avctx, AV_LOG_INFO, " Pin \"%s\" (alternative name \"%s\")\n", name_buf, pin_buf);
             dshow_cycle_formats(avctx, devtype, pin, NULL);
             goto next;
         }
@@ -778,7 +778,8 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         goto error;
     }
 
-    r = setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_number, ctx->crossbar_audio_input_number);
+    r = setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_number, 
+        ctx->crossbar_audio_input_number, ctx->device_name[devtype]);
 
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not setup CrossBar\n");
@@ -1000,7 +1001,7 @@ static int dshow_read_header(AVFormatContext *avctx)
     }
 
     if (ctx->list_devices) {
-        av_log(avctx, AV_LOG_INFO, "DirectShow video (and video+audio combo) devices\n");
+        av_log(avctx, AV_LOG_INFO, "DirectShow video devices (includes some devices that are both video and audio devices)\n");
         dshow_cycle_devices(avctx, devenum, VideoDevice, VideoSourceDevice, NULL);
         av_log(avctx, AV_LOG_INFO, "DirectShow audio devices\n");
         dshow_cycle_devices(avctx, devenum, AudioDevice, AudioSourceDevice, NULL);
