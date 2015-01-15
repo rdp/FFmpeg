@@ -43,7 +43,7 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
     long cOutput = -1, cInput = -1;
     hr = pXBar->get_PinCounts(&cOutput, &cInput);
     int i;
-    printf("CrossBar Information for %s:\n", device_name);
+    av_log(NULL, AV_LOG_INFO, "CrossBar Information for %s:\n", device_name); // TODO only log if show_options set
     for (i = 0; i < cOutput; i++)
     {
         long lRelated = -1, lType = -1, lRouted = -1;
@@ -63,7 +63,7 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
 				av_log(NULL, AV_LOG_DEBUG, "routing audio input from pin %d\n", audio_input_pin);
 				if(pXBar->Route(i, audio_input_pin) != S_OK) {
 				    av_log(NULL, AV_LOG_ERROR, "unable to route audio input from pin %d\n", audio_input_pin);
-				    return -1;
+				    return -1; // TODO do we check this?
 				}
 			}
 		} else {
@@ -72,17 +72,17 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
 
 		hr = pXBar->get_IsRoutedTo(i, &lRouted);
 
-        printf("Output pin %d: %s\n", i, GetPhysicalPinName(lType)); // like "Video Decoder"
+        av_log(NULL, AV_LOG_INFO, "Output pin %d: %s\n", i, GetPhysicalPinName(lType)); // like "Video Decoder"
 		
-        printf("\tRelated out: %ld, Currently Routed in: %ld\n", lRelated, lRouted);
-        printf("\tSwitching Compatibility: ");
+        av_log(NULL, AV_LOG_INFO, "\tRelated out: %ld, Currently Routed in: %ld\n", lRelated, lRouted);
+        av_log(NULL, AV_LOG_INFO, "\tSwitching Compatibility: ");
 
         for (int j = 0; j < cInput; j++)
         {
             hr = pXBar->CanRoute(i, j);
-            printf("%d-%s ", j, (S_OK == hr ? "Yes" : "No"));
+            av_log(NULL, AV_LOG_INFO ,"%d-%s ", j, (S_OK == hr ? "Yes" : "No"));
         }
-        printf("\n");
+        av_log(NULL, AV_LOG_INFO, "\n");
     }
 
     for (i = 0; i < cInput; i++)
@@ -91,15 +91,16 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
 
         hr = pXBar->get_CrossbarPinInfo(TRUE, i, &lRelated, &lType);
 
-        printf("Input pin %d - %s\n", i, GetPhysicalPinName(lType));
-        printf("\tRelated in: %ld\n", lRelated);
+        av_log(NULL, AV_LOG_INFO, "Input pin %d - %s\n", i, GetPhysicalPinName(lType));
+        av_log(NULL, AV_LOG_INFO, "\tRelated in: %ld\n", lRelated);
     }
-	return S_OK;
+    return S_OK;
 }
 
 extern "C" {
 
-/* todo return hresult, log warning */
+/* todo return hresult, log warning if unable to show */
+
 void show_properties(IBaseFilter *pFilter) {
 /* Obtain the filter's IBaseFilter interface. (Not shown) */
 ISpecifyPropertyPages *pProp;
