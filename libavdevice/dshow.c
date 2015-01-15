@@ -43,7 +43,9 @@ struct dshow_ctx {
     int   crossbar_video_input_number;
     int   crossbar_audio_input_number;
     char *video_pin_name;
-    char *audio_pin_name;;
+    char *audio_pin_name;
+    int   video_show_properties;
+    int   audio_show_properties;
 
 
     IBaseFilter *device_filter[2];
@@ -311,7 +313,6 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
         friendly_name = dup_wchar_to_utf8(var.bstrVal);
 
         if (pfilter) {
-            printf("comparing %s %s %s %d\n", device_name, friendly_name, unique_name, strcmp(device_name, friendly_name));
             if (strcmp(device_name, friendly_name) && strcmp(device_name, unique_name))
                 goto fail1;
 
@@ -571,6 +572,10 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
                                                  ctx->video_codec_id != AV_CODEC_ID_RAWVIDEO))
                   || (devtype == AudioDevice && (ctx->channels || ctx->sample_rate));
     int format_set = 0;
+    int should_show_properties = (devtype == VideoDevice) ? ctx->video_show_properties : ctx->audio_show_properties;
+    
+    if (should_show_properties)
+        show_properties(device_filter); 
 
     r = IBaseFilter_EnumPins(device_filter, &pins);
     if (r != S_OK) {
@@ -581,8 +586,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     if (!ppin) {
         av_log(avctx, AV_LOG_INFO, "DirectShow %s device options (from %s source devices)\n",
                devtypename, sourcetypename);
-    }
-            show_properties(device_filter);
+    }            
 
     while (!device_pin && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
         IKsPropertySet *p = NULL;
@@ -1185,11 +1189,17 @@ static const AVOption options[] = {
     { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "list_options" },
     { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "list_options" },
     { "video_device_number", "set video device number for devices with same name (starts at 0)", OFFSET(video_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "audio_device_number", "set audio device number for devices with same name (starts at 0)", OFFSET(audio_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "video_pin_name", "select video capture pin by name", OFFSET(video_pin_name),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0, AV_OPT_FLAG_ENCODING_PARAM },
     { "audio_pin_name", "select audio capture pin by name", OFFSET(audio_pin_name),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0, AV_OPT_FLAG_ENCODING_PARAM },
     { "crossbar_video_input_number", "set video input pin number for crossbar devices", OFFSET(crossbar_video_input_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
     { "crossbar_audio_input_number", "set audio input pin number for crossbar devices", OFFSET(crossbar_audio_input_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
-    { "audio_device_number", "set audio device number for devices with same name (starts at 0)", OFFSET(audio_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "show_video_device_properties_dialog", "display property dialog for video capture device", OFFSET(video_show_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "video_show_properties" },
+    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_video_device_properties_dialog" },
+    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_video_device_properties_dialog" },
+    { "show_audio_device_properties_dialog", "display property dialog for audio capture device", OFFSET(audio_show_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "audio_show_properties" },
+    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_audio_device_properties_dialog" },
+    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_audio_device_properties_dialog" },
     { "audio_buffer_size", "set audio device buffer latency size in milliseconds (default is the device's default)", OFFSET(audio_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { NULL },
 };
