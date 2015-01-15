@@ -582,6 +582,8 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         av_log(avctx, AV_LOG_INFO, "DirectShow %s device options (from %s source devices)\n",
                devtypename, sourcetypename);
     }
+            show_properties(device_filter);
+
     while (!device_pin && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
         IKsPropertySet *p = NULL;
         IEnumMediaTypes *types = NULL;
@@ -1015,6 +1017,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         goto error;
     }
     if (ctx->list_options) {
+    
         if (ctx->device_name[VideoDevice])
             if ((r = dshow_list_device_options(avctx, devenum, VideoDevice, VideoSourceDevice))) {
                 ret = r;

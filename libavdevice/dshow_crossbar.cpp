@@ -97,8 +97,44 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
 	return S_OK;
 }
 
-
 extern "C" {
+
+void show_properties(IBaseFilter *pFilter) {
+/* Obtain the filter's IBaseFilter interface. (Not shown) */
+ISpecifyPropertyPages *pProp;
+HRESULT hr = pFilter->QueryInterface(IID_ISpecifyPropertyPages, (void **)&pProp);
+if (SUCCEEDED(hr)) 
+{
+    // Get the filter's name and IUnknown pointer.
+    FILTER_INFO FilterInfo;
+    hr = pFilter->QueryFilterInfo(&FilterInfo); 
+    IUnknown *pFilterUnk;
+    pFilter->QueryInterface(IID_IUnknown, (void **)&pFilterUnk);
+
+    // Show the page. 
+    CAUUID caGUID;
+    pProp->GetPages(&caGUID);
+    pProp->Release();
+    OleCreatePropertyFrame(
+        NULL,                   // Parent window
+        0, 0,                   // Reserved
+        FilterInfo.achName,     // Caption for the dialog box
+        1,                      // Number of objects (just the filter)
+        &pFilterUnk,            // Array of object pointers. 
+        caGUID.cElems,          // Number of property pages
+        caGUID.pElems,          // Array of property page CLSIDs
+        0,                      // Locale identifier
+        0, NULL                 // Reserved
+    );
+
+    // Clean up.
+    pFilterUnk->Release();
+    if (FilterInfo.pGraph)
+      FilterInfo.pGraph->Release(); 
+    CoTaskMemFree(caGUID.pElems);
+}
+}
+
     HRESULT setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFilter *device_filter, 
         int crossbar_video_input_pin_number, int crossbar_audio_input_pin_number, const char *device_name) {
         IAMCrossbar *pCrossBar = NULL;
