@@ -99,6 +99,7 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
 
 extern "C" {
 
+/* todo return hresult, log warning */
 void show_properties(IBaseFilter *pFilter) {
 /* Obtain the filter's IBaseFilter interface. (Not shown) */
 ISpecifyPropertyPages *pProp;
