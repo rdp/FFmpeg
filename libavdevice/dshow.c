@@ -619,7 +619,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
                   || (devtype == AudioDevice && (ctx->channels || ctx->sample_rate));
     int format_set = 0;
     int should_show_properties = (devtype == VideoDevice) ? ctx->show_video_device_properties : ctx->show_audio_device_properties;
-    
+
     if (should_show_properties)
         dshow_show_filter_properties(device_filter, avctx); 
 
@@ -632,7 +632,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     if (!ppin) {
         av_log(avctx, AV_LOG_INFO, "DirectShow %s device options (from %s source devices)\n",
                devtypename, sourcetypename);
-    }            
+    }
 
     while (!device_pin && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
         IKsPropertySet *p = NULL;
@@ -645,7 +645,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         wchar_t *pin_id = NULL;
         char *pin_buf = NULL;
         char *desired_pin_name = devtype == VideoDevice ? ctx->video_pin_name : ctx->audio_pin_name;
-    
+
         IPin_QueryPinInfo(pin, &info);
         IBaseFilter_Release(info.pFilter);
 
@@ -672,7 +672,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
             dshow_cycle_formats(avctx, devtype, pin, NULL);
             goto next;
         }
-        
+
         if (desired_pin_name) {
             if(strcmp(name_buf, desired_pin_name) && strcmp(pin_buf, desired_pin_name)) {
                 av_log(avctx, AV_LOG_DEBUG, "skipping pin \"%s\" (\"%s\") != requested \"%s\"\n", 
@@ -815,7 +815,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     libAVPin_AddRef(capture_filter->pin);
     capture_pin = capture_filter->pin;
     ctx->capture_pin[devtype] = capture_pin;
-    
+
     r = CoCreateInstance(&CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
                          &IID_ICaptureGraphBuilder2, (void **) &graph_builder2);	
     if (r != S_OK) {
@@ -836,7 +836,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         goto error;
     }
 
-    r = dshow_try_setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_pin_number, 
+    r = dshow_try_setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_pin_number,
         ctx->crossbar_audio_input_pin_number, ctx->device_name[devtype], ctx->list_options, avctx);
 
     if (r != S_OK) {
@@ -1067,7 +1067,6 @@ static int dshow_read_header(AVFormatContext *avctx)
         goto error;
     }
     if (ctx->list_options) {
-    
         if (ctx->device_name[VideoDevice])
             if ((r = dshow_list_device_options(avctx, devenum, VideoDevice, VideoSourceDevice))) {
                 ret = r;
