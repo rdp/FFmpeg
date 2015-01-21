@@ -117,32 +117,6 @@ setup_crossbar_options(IAMCrossbar *pXBar, int video_input_pin, int audio_input_
     return S_OK;
 }
 
-void 
-dshow_show_filter_properties(IBaseFilter *pFilter, AVFormatContext *avctx) {
-    ISpecifyPropertyPages *pProp;
-    HRESULT hr = IBaseFilter_QueryInterface(pFilter, &IID_ISpecifyPropertyPages, (void **)&pProp);
-    if (SUCCEEDED(hr)) 
-    {
-        FILTER_INFO FilterInfo;
-        IUnknown *pFilterUnk;
-        CAUUID caGUID;
-
-        hr = IBaseFilter_QueryFilterInfo(pFilter, &FilterInfo); 
-        IBaseFilter_QueryInterface(pFilter, &IID_IUnknown, (void **)&pFilterUnk);
-        ISpecifyPropertyPages_GetPages(pProp, &caGUID);
-        ISpecifyPropertyPages_Release(pProp);
-        OleCreatePropertyFrame(NULL, 0, 0, FilterInfo.achName, 1, &pFilterUnk, caGUID.cElems, 
-            caGUID.pElems, 0, 0, NULL);
-
-        IUnknown_Release(pFilterUnk);
-        if (FilterInfo.pGraph)
-          IFilterGraph_Release(FilterInfo.pGraph); 
-        CoTaskMemFree(caGUID.pElems);
-    } else {
-        av_log(avctx, AV_LOG_WARNING, "unable to show properties for a requested filter");
-    }
-}
-
 HRESULT 
 dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFilter *device_filter, 
     int crossbar_video_input_pin_number, int crossbar_audio_input_pin_number, const char *device_name, 
