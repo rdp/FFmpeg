@@ -320,12 +320,12 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     } else {
         int64_t dummy;
         IMediaSample_GetTime(sample, &curtime, &dummy);
-        if(curtime > pin->filter->start_time) {
+        if(curtime > 400000000000000000LL) {
             /* initial frames sometimes start < 0 (shown as a very large number here,
-               like 437650244077016960 which isn't handled well
-               since it causes some kind of subsequent discontinuity gap
+               like 437650244077016960 which FFmpeg doesn't like.
                TODO figure out math. For now just drop them. */
-            av_log(NULL, AV_LOG_DEBUG, "dropping initial audio frame with PTS too high %"PRId64"\n", curtime); 
+            av_log(NULL, AV_LOG_DEBUG, 
+                "dshow dropping initial (or ending) audio frame with odd PTS too high %"PRId64"\n", curtime); 
             return S_OK;
         }
         curtime += pin->filter->start_time;        
