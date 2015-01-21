@@ -575,7 +575,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     int should_show_properties = (devtype == VideoDevice) ? ctx->video_show_properties : ctx->audio_show_properties;
     
     if (should_show_properties)
-        dshow_show_filter_properties(device_filter); 
+        dshow_show_filter_properties(device_filter, avctx); 
 
     r = IBaseFilter_EnumPins(device_filter, &pins);
     if (r != S_OK) {
@@ -780,7 +780,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not set graph for CaptureGraphBuilder2\n");
         goto error;
-    }	
+    }
 
     r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) device_pin, NULL /* no intermediate filter */,
         (IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
@@ -791,7 +791,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     }
 
     r = dshow_try_setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_number, 
-        ctx->crossbar_audio_input_number, ctx->device_name[devtype]);
+        ctx->crossbar_audio_input_number, ctx->device_name[devtype], ctx->list_options, avctx);
 
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not setup CrossBar\n");
@@ -1047,6 +1047,7 @@ static int dshow_read_header(AVFormatContext *avctx)
     if (ctx->device_name[AudioDevice]) {
         if ((r = dshow_open_device(avctx, devenum, AudioDevice, AudioSourceDevice)) < 0 ||
             (r = dshow_add_device(avctx, AudioDevice)) < 0) {
+            av_log(avctx, AV_LOG_INFO, "Searching for audio device within video devices %s\n", ctx->device_name[AudioDevice]);
             /* see if there's a video source with an audio pin with the given audio name */
             if ((r = dshow_open_device(avctx, devenum, AudioDevice, VideoSourceDevice)) < 0 ||
                 (r = dshow_add_device(avctx, AudioDevice)) < 0) {
