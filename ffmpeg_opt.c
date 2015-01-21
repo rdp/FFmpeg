@@ -77,6 +77,7 @@ const HWAccel hwaccels[] = {
 };
 
 char *vstats_filename;
+char *sdp_filename;
 
 float audio_drift_threshold = 0.1;
 float dts_delta_threshold   = 10;
@@ -378,6 +379,13 @@ static int opt_map_channel(void *optctx, const char *opt, const char *arg)
                m->file_idx, m->stream_idx, m->channel_idx);
         exit_program(1);
     }
+    return 0;
+}
+
+static int opt_sdp_file(void *optctx, const char *opt, const char *arg)
+{
+    av_free(sdp_filename);
+    sdp_filename = av_strdup(arg);
     return 0;
 }
 
@@ -796,6 +804,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
     char *   video_codec_name = NULL;
     char *   audio_codec_name = NULL;
     char *subtitle_codec_name = NULL;
+    char *    data_codec_name = NULL;
     int scan_all_pmts_set = 0;
 
     if (o->format) {
@@ -856,6 +865,8 @@ static int open_input_file(OptionsContext *o, const char *filename)
         find_codec_or_die(audio_codec_name   , AVMEDIA_TYPE_AUDIO   , 0)->id : AV_CODEC_ID_NONE;
     ic->subtitle_codec_id= subtitle_codec_name ?
         find_codec_or_die(subtitle_codec_name, AVMEDIA_TYPE_SUBTITLE, 0)->id : AV_CODEC_ID_NONE;
+    ic->data_codec_id    = data_codec_name ?
+        find_codec_or_die(data_codec_name, AVMEDIA_TYPE_DATA, 0)->id : AV_CODEC_ID_NONE;
 
     if (video_codec_name)
         av_format_set_video_codec   (ic, find_codec_or_die(video_codec_name   , AVMEDIA_TYPE_VIDEO   , 0));
@@ -863,6 +874,8 @@ static int open_input_file(OptionsContext *o, const char *filename)
         av_format_set_audio_codec   (ic, find_codec_or_die(audio_codec_name   , AVMEDIA_TYPE_AUDIO   , 0));
     if (subtitle_codec_name)
         av_format_set_subtitle_codec(ic, find_codec_or_die(subtitle_codec_name, AVMEDIA_TYPE_SUBTITLE, 0));
+    if (data_codec_name)
+        av_format_set_data_codec(ic, find_codec_or_die(data_codec_name, AVMEDIA_TYPE_DATA, 0));
 
     ic->flags |= AVFMT_FLAG_NONBLOCK;
     ic->interrupt_callback = int_cb;
@@ -1113,7 +1126,7 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
                 av_dict_set(&ost->encoder_opts, buf, arg, AV_DICT_DONT_OVERWRITE);
                 av_free(buf);
             } while (!s->eof_reached);
-            avio_close(s);
+            avio_closep(&s);
         }
         if (ret) {
             av_log(NULL, AV_LOG_FATAL,
@@ -1373,10 +1386,11 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc, in
                 av_log(NULL, AV_LOG_FATAL, "error parsing rc_override\n");
                 exit_program(1);
             }
-            /* FIXME realloc failure */
             video_enc->rc_override =
-                av_realloc(video_enc->rc_override,
-                           sizeof(RcOverride) * (i + 1));
+                av_realloc_array(video_enc->rc_override,
+                                 i + 1, sizeof(RcOverride));
+            if (!video_enc->rc_override)
+                exit_program(1);
             video_enc->rc_override[i].start_frame = start;
             video_enc->rc_override[i].end_frame   = end;
             if (q > 0) {
@@ -2008,7 +2022,7 @@ loop_end:
 
         p = strrchr(o->attachments[i], '/');
         av_dict_set(&ost->st->metadata, "filename", (p && *p) ? p + 1 : o->attachments[i], AV_DICT_DONT_OVERWRITE);
-        avio_close(pb);
+        avio_closep(&pb);
     }
 
     for (i = nb_output_streams - oc->nb_streams; i < nb_output_streams; i++) { //for all streams of this output file
@@ -3070,6 +3084,8 @@ const OptionDef options[] = {
         "set the initial demux-decode delay", "seconds" },
     { "override_ffserver", OPT_BOOL | OPT_EXPERT | OPT_OUTPUT, { &override_ffserver },
         "override the options from ffserver", "" },
+    { "sdp_file", HAS_ARG | OPT_EXPERT | OPT_OUTPUT, { opt_sdp_file },
+        "specify a file in which to print sdp information", "file" },
 
     { "bsf", HAS_ARG | OPT_STRING | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(bitstream_filters) },
         "A comma-separated list of bitstream filters", "bitstream_filters" },

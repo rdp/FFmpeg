@@ -762,10 +762,7 @@ static void decode_postinit(H264Context *h, int setup_finished)
          * yet, so we assume the worst for now. */
         // if (setup_finished)
         //    ff_thread_finish_setup(h->avctx);
-        if (cur->field_poc[0] == INT_MAX && cur->field_poc[1] == INT_MAX)
-            return;
-        if (h->avctx->hwaccel || !(h->avctx->flags2 & CODEC_FLAG2_SHOW_ALL))
-            return;
+        return;
     }
 
     cur->f.interlaced_frame = 0;
@@ -1838,6 +1835,8 @@ static int h264_decode_frame(AVCodecContext *avctx, void *data,
      * packets do not get used. */
     h->data_partitioning = 0;
 
+    ff_h264_unref_picture(h, &h->last_pic_for_ec);
+
     /* end of stream, output what is still in the buffers */
     if (buf_size == 0) {
  out:
@@ -1930,6 +1929,8 @@ static int h264_decode_frame(AVCodecContext *avctx, void *data,
 
     assert(pict->buf[0] || !*got_frame);
 
+    ff_h264_unref_picture(h, &h->last_pic_for_ec);
+
     return get_consumed_bytes(buf_index, buf_size);
 }
 
@@ -1954,6 +1955,7 @@ static av_cold int h264_decode_end(AVCodecContext *avctx)
     ff_h264_free_context(h);
 
     ff_h264_unref_picture(h, &h->cur_pic);
+    ff_h264_unref_picture(h, &h->last_pic_for_ec);
 
     return 0;
 }

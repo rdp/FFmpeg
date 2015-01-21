@@ -7,6 +7,15 @@ version <next>:
 - colorlevels filter
 - RIFX format for *.wav files
 - RTP/mpegts muxer
+- non continuous cache protocol support
+- tblend filter
+- cropdetect support for non 8bpp, absolute (if limit >= 1) and relative (if limit < 1.0) threshold
+- Camellia symmetric block cipher
+- OpenH264 encoder wrapper
+- VOC seeking support
+- Closed caption Decoder
+- fspp, uspp, pp7 MPlayer postprocessing filters ported to native filters
+- showpalette filter
 
 
 version 2.5:

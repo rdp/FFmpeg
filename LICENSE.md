@@ -29,8 +29,8 @@ Specifically, the GPL parts of FFmpeg are:
     - vf_boxblur.c
     - vf_colormatrix.c
     - vf_cropdetect.c
-    - vf_decimate.c
     - vf_delogo.c
+    - vf_fspp.c
     - vf_geq.c
     - vf_histeq.c
     - vf_hqdn3d.c
@@ -38,10 +38,12 @@ Specifically, the GPL parts of FFmpeg are:
     - vf_kerndeint.c
     - vf_mcdeint.c
     - vf_mp.c
+    - vf_mpdecimate.c
     - vf_owdenoise.c
     - vf_perspective.c
     - vf_phase.c
     - vf_pp.c
+    - vf_pp7.c
     - vf_pullup.c
     - vf_sab.c
     - vf_smartblur.c

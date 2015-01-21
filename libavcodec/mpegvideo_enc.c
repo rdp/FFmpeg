@@ -342,7 +342,7 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
     s->rtp_mode           = !!avctx->rtp_payload_size;
     s->intra_dc_precision = avctx->intra_dc_precision;
 
-    // workaround some differences between how applications specify dc precission
+    // workaround some differences between how applications specify dc precision
     if (s->intra_dc_precision < 0) {
         s->intra_dc_precision += 8;
     } else if (s->intra_dc_precision >= 8)
@@ -889,7 +889,8 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
     if (CONFIG_H263_ENCODER && s->out_format == FMT_H263)
         ff_h263_encode_init(s);
     if (CONFIG_MSMPEG4_ENCODER && s->msmpeg4_version)
-        ff_msmpeg4_encode_init(s);
+        if ((ret = ff_msmpeg4_encode_init(s)) < 0)
+            return ret;
     if ((CONFIG_MPEG1VIDEO_ENCODER || CONFIG_MPEG2VIDEO_ENCODER)
         && s->out_format == FMT_MPEG1)
         ff_mpeg1_encode_init(s);

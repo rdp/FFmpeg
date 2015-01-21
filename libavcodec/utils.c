@@ -297,8 +297,8 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
     case AV_PIX_FMT_YUV422P:
     case AV_PIX_FMT_YUV440P:
     case AV_PIX_FMT_YUV444P:
-    case AV_PIX_FMT_GBRAP:
     case AV_PIX_FMT_GBRP:
+    case AV_PIX_FMT_GBRAP:
     case AV_PIX_FMT_GRAY8:
     case AV_PIX_FMT_GRAY16BE:
     case AV_PIX_FMT_GRAY16LE:
@@ -890,10 +890,13 @@ static int get_buffer_internal(AVCodecContext *avctx, AVFrame *frame, int flags)
     if ((ret = ff_init_buffer_info(avctx, frame)) < 0)
         return ret;
 
-    if (hwaccel && hwaccel->alloc_frame) {
-        ret = hwaccel->alloc_frame(avctx, frame);
-        goto end;
-    }
+    if (hwaccel) {
+        if (hwaccel->alloc_frame) {
+            ret = hwaccel->alloc_frame(avctx, frame);
+            goto end;
+        }
+    } else
+        avctx->sw_pix_fmt = avctx->pix_fmt;
 
 #if FF_API_GET_BUFFER
 FF_DISABLE_DEPRECATION_WARNINGS
@@ -1195,6 +1198,10 @@ int ff_get_format(AVCodecContext *avctx, const enum AVPixelFormat *fmt)
 
     while (fmt[n] != AV_PIX_FMT_NONE)
         ++n;
+
+    av_assert0(n >= 1);
+    avctx->sw_pix_fmt = fmt[n - 1];
+    av_assert2(!is_hwaccel_pix_fmt(avctx->sw_pix_fmt));
 
     choices = av_malloc_array(n + 1, sizeof(*choices));
     if (!choices)

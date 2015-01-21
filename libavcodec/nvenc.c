@@ -19,24 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#if defined(_WIN32) && !defined(__CYGWIN__)
+#if defined(_WIN32)
 #include <windows.h>
 #else
 #include <dlfcn.h>
 #endif
 
-/* NVENC API is stdcall in cygwin, as it's still Windows */
-#if defined(__CYGWIN__) && !defined(_WIN32)
-#define _WIN32
-#define TEMP_WIN32
-#endif
-
 #include <nvEncodeAPI.h>
-
-#if defined(TEMP_WIN32)
-#undef _WIN32
-#endif
-
 
 #include "libavutil/internal.h"
 #include "libavutil/imgutils.h"
@@ -47,13 +36,13 @@
 #include "internal.h"
 #include "thread.h"
 
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32)
 #define CUDAAPI __stdcall
 #else
 #define CUDAAPI
 #endif
 
-#if defined(_WIN32) && !defined(__CYGWIN__)
+#if defined(_WIN32)
 #define LOAD_FUNC(l, s) GetProcAddress(l, s)
 #define DL_CLOSE_FUNC(l) FreeLibrary(l)
 #else
@@ -78,7 +67,9 @@ typedef CUresult(CUDAAPI *PCUCTXDESTROY)(CUcontext ctx);
 
 typedef NVENCSTATUS (NVENCAPI* PNVENCODEAPICREATEINSTANCE)(NV_ENCODE_API_FUNCTION_LIST *functionList);
 
+#if NVENCAPI_MAJOR_VERSION < 5
 static const GUID dummy_license = { 0x0, 0x0, 0x0, { 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0 } };
+#endif
 
 typedef struct NvencInputSurface
 {
@@ -133,7 +124,7 @@ typedef struct NvencDynLoadFunctions
     int nvenc_device_count;
     CUdevice nvenc_devices[16];
 
-#if defined(_WIN32) && !defined(__CYGWIN__)
+#if defined(_WIN32)
     HMODULE cuda_lib;
     HMODULE nvenc_lib;
 #else
@@ -290,8 +281,6 @@ static av_cold int nvenc_dyload_cuda(AVCodecContext *avctx)
 
 #if defined(_WIN32)
     dl_fn->cuda_lib = LoadLibrary(TEXT("nvcuda.dll"));
-#elif defined(__CYGWIN__)
-    dl_fn->cuda_lib = dlopen("nvcuda.dll", RTLD_LAZY);
 #else
     dl_fn->cuda_lib = dlopen("libcuda.so", RTLD_LAZY);
 #endif
@@ -409,12 +398,6 @@ static av_cold int nvenc_dyload_nvenc(AVCodecContext *avctx)
     } else {
         dl_fn->nvenc_lib = LoadLibrary(TEXT("nvEncodeAPI.dll"));
     }
-#elif defined(__CYGWIN__)
-    if (sizeof(void*) == 8) {
-        dl_fn->nvenc_lib = dlopen("nvEncodeAPI64.dll", RTLD_LAZY);
-    } else {
-        dl_fn->nvenc_lib = dlopen("nvEncodeAPI.dll", RTLD_LAZY);
-    }
 #else
     dl_fn->nvenc_lib = dlopen("libnvidia-encode.so.1", RTLD_LAZY);
 #endif
@@ -485,12 +468,15 @@ static av_cold int nvenc_encode_init(AVCodecContext *avctx)
     CUcontext cu_context_curr;
     CUresult cu_res;
     GUID encoder_preset = NV_ENC_PRESET_HQ_GUID;
-    GUID license = dummy_license;
     NVENCSTATUS nv_status = NV_ENC_SUCCESS;
     int surfaceCount = 0;
     int i, num_mbs;
     int isLL = 0;
     int res = 0;
+
+#if NVENCAPI_MAJOR_VERSION < 5
+    GUID license = dummy_license;
+#endif
 
     NvencContext *ctx = avctx->priv_data;
     NvencDynLoadFunctions *dl_fn = &ctx->nvenc_dload_funcs;
@@ -513,7 +499,10 @@ static av_cold int nvenc_encode_init(AVCodecContext *avctx)
     preset_config.presetCfg.version = NV_ENC_CONFIG_VER;
     encode_session_params.version = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER;
     encode_session_params.apiVersion = NVENCAPI_VERSION;
+
+#if NVENCAPI_MAJOR_VERSION < 5
     encode_session_params.clientKeyPtr = &license;
+#endif
 
     if (ctx->gpu >= dl_fn->nvenc_device_count) {
         av_log(avctx, AV_LOG_FATAL, "Requested GPU %d, but only %d GPUs are available!\n", ctx->gpu, dl_fn->nvenc_device_count);
@@ -676,7 +665,12 @@ static av_cold int nvenc_encode_init(AVCodecContext *avctx)
     }
 
     if (ctx->gobpattern >= 0) {
-        ctx->encode_config.frameIntervalP = 1;
+        ctx->encode_config.frameIntervalP = ctx->gobpattern;
+    }
+
+    // when there're b frames, set dts offset
+    if (ctx->encode_config.frameIntervalP >= 2) {
+        ctx->last_dts = -2;
     }
 
     ctx->encode_config.encodeCodecConfig.h264Config.h264VUIParameters.colourDescriptionPresentFlag = 1;
@@ -689,6 +683,7 @@ static av_cold int nvenc_encode_init(AVCodecContext *avctx)
     ctx->encode_config.encodeCodecConfig.h264Config.h264VUIParameters.videoFullRangeFlag = avctx->color_range == AVCOL_RANGE_JPEG;
 
     ctx->encode_config.encodeCodecConfig.h264Config.disableSPSPPS = (avctx->flags & CODEC_FLAG_GLOBAL_HEADER) ? 1 : 0;
+    ctx->encode_config.encodeCodecConfig.h264Config.repeatSPSPPS = (avctx->flags & CODEC_FLAG_GLOBAL_HEADER) ? 0 : 1;
 
     nv_status = p_nvenc->nvEncInitializeEncoder(ctx->nvencoder, &ctx->init_encode_params);
     if (nv_status != NV_ENC_SUCCESS) {
@@ -924,6 +919,10 @@ static int process_output_surface(AVCodecContext *avctx, AVPacket *pkt, AVFrame 
     pkt->pts = lock_params.outputTimeStamp;
     pkt->dts = timestamp_queue_dequeue(&ctx->timestamp_list);
 
+    // when there're b frame(s), set dts offset
+    if (ctx->encode_config.frameIntervalP >= 2)
+        pkt->dts -= 1;
+
     if (pkt->dts > pkt->pts)
         pkt->dts = pkt->pts;
 
@@ -1075,7 +1074,10 @@ static int nvenc_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         pic_params.inputDuration = 0;
         pic_params.codecPicParams.h264PicParams.sliceMode = ctx->encode_config.encodeCodecConfig.h264Config.sliceMode;
         pic_params.codecPicParams.h264PicParams.sliceModeData = ctx->encode_config.encodeCodecConfig.h264Config.sliceModeData;
+
+#if NVENCAPI_MAJOR_VERSION < 5
         memcpy(&pic_params.rcParams, &ctx->encode_config.rcParams, sizeof(NV_ENC_RC_PARAMS));
+#endif
 
         res = timestamp_queue_enqueue(&ctx->timestamp_list, frame->pts);
 

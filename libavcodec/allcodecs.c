@@ -481,6 +481,7 @@ void avcodec_register_all(void)
     /* subtitles */
     REGISTER_ENCDEC (SSA,               ssa);
     REGISTER_ENCDEC (ASS,               ass);
+    REGISTER_DECODER(CCAPTION,          ccaption);
     REGISTER_ENCDEC (DVBSUB,            dvbsub);
     REGISTER_ENCDEC (DVDSUB,            dvdsub);
     REGISTER_DECODER(JACOSUB,           jacosub);
@@ -534,6 +535,7 @@ void avcodec_register_all(void)
     REGISTER_ENCODER(LIBXVID,           libxvid);
     REGISTER_DECODER(LIBZVBI_TELETEXT,  libzvbi_teletext);
     REGISTER_ENCODER(LIBAACPLUS,        libaacplus);
+    REGISTER_ENCODER(LIBOPENH264,       libopenh264);
 
     /* text */
     REGISTER_DECODER(BINTEXT,           bintext);
