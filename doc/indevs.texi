@@ -167,7 +167,7 @@ The input name should be in the format:
 @end example
 
 where @var{TYPE} can be either @var{audio} or @var{video},
-and @var{NAME} is the device's name.
+and @var{NAME} is the device's name or alternative name..
 
 @subsection Options
 
@@ -219,6 +219,30 @@ default buffer size (typically some multiple of 500ms).
 Setting this value too low can degrade performance.
 See also
 @url{http://msdn.microsoft.com/en-us/library/windows/desktop/dd377582(v=vs.85).aspx}
+
+@item video_pin_name
+Select video capture pin to use by name or alternative name.
+
+@item audio_pin_name
+Select audio capture pin to use by name or alternative name.
+
+@item crossbar_video_input_pin_number
+Set video input pin number for crossbar device. This will be
+routed to the crossbar device's Video Decoder output pin.
+
+@item crossbar_audio_input_pin_number
+Set audio input pin number for crossbar device. This will be
+routed to the crossbar device's Audio Decoder output pin.
+
+@item show_video_device_properties
+Before capture starts, popup a display dialog
+to the end user, allowing them to change video filter properties
+and configurations manually.
+
+@item show_audio_device_properties
+Before capture starts, popup a display dialog
+to the end user, allowing them to change audio filter properties
+and configurations manually.
 
 @end table
 
