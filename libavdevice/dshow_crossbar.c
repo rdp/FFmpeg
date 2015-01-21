@@ -1,7 +1,25 @@
-extern "C" {
-  #include "avdevice.h"
-  #include <dshow.h>
-}
+/*
+ * DirectShow capture interface
+ * Copyright (c) 2015 Roger Pack
+ *
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+#include "dshow_capture.h"
 
 static const char * GetPhysicalPinName(long lType)
 {
@@ -36,24 +54,24 @@ static const char * GetPhysicalPinName(long lType)
     }
 }
 
-
-HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_input_pin, const char *device_name)
+static HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_input_pin, const char *device_name)
 {
     HRESULT hr;
     long cOutput = -1, cInput = -1;
-    hr = pXBar->get_PinCounts(&cOutput, &cInput);
     int i;
+	
     av_log(NULL, AV_LOG_INFO, "CrossBar Information for %s:\n", device_name); // TODO only log if show_options set
+    hr = IAMCrossbar_get_PinCounts(pXBar, &cOutput, &cInput);
     for (i = 0; i < cOutput; i++)
     {
         long lRelated = -1, lType = -1, lRouted = -1;
 
-        hr = pXBar->get_CrossbarPinInfo(FALSE, i, &lRelated, &lType);
+        hr = IAMCrossbar_get_CrossbarPinInfo(pXBar, FALSE, i, &lRelated, &lType);
         if (lType == PhysConn_Video_VideoDecoder) {
 			// assume there is only one "Video (and one Audio) Decoder" output pin, and it's all we care about routing to...for now
 			if (video_input_pin != -1) {
 				av_log(NULL, AV_LOG_DEBUG, "routing video input from pin %d\n", video_input_pin);
-				if(pXBar->Route(i, video_input_pin) != S_OK) {
+				if(IAMCrossbar_Route(pXBar, i, video_input_pin) != S_OK) {
 				  av_log(NULL, AV_LOG_ERROR, "unable to route video input from pin %d\n", video_input_pin);
 				  return -1;
 				}
@@ -61,7 +79,7 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
 		} else if (lType == PhysConn_Audio_AudioDecoder) {
         	if (audio_input_pin != -1) {
 				av_log(NULL, AV_LOG_DEBUG, "routing audio input from pin %d\n", audio_input_pin);
-				if(pXBar->Route(i, audio_input_pin) != S_OK) {
+				if(IAMCrossbar_Route(pXBar, i, audio_input_pin) != S_OK) {
 				    av_log(NULL, AV_LOG_ERROR, "unable to route audio input from pin %d\n", audio_input_pin);
 				    return -1; // TODO do we check this?
 				}
@@ -70,7 +88,7 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
 			av_log(NULL, AV_LOG_WARNING, "unexpected output pin type, please report the type if you want to use this (%s)", GetPhysicalPinName(lType));
 		}
 
-		hr = pXBar->get_IsRoutedTo(i, &lRouted);
+		hr = IAMCrossbar_get_IsRoutedTo(pXBar, i, &lRouted);
 
         av_log(NULL, AV_LOG_INFO, "Output pin %d: %s\n", i, GetPhysicalPinName(lType)); // like "Video Decoder"
 		
@@ -79,7 +97,7 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
 
         for (int j = 0; j < cInput; j++)
         {
-            hr = pXBar->CanRoute(i, j);
+            hr = IAMCrossbar_CanRoute(pXBar, i, j);
             av_log(NULL, AV_LOG_INFO ,"%d-%s ", j, (S_OK == hr ? "Yes" : "No"));
         }
         av_log(NULL, AV_LOG_INFO, "\n");
@@ -89,7 +107,7 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
     {
         long lRelated = -1, lType = -1;
 
-        hr = pXBar->get_CrossbarPinInfo(TRUE, i, &lRelated, &lType);
+        hr = IAMCrossbar_get_CrossbarPinInfo(pXBar, TRUE, i, &lRelated, &lType);
 
         av_log(NULL, AV_LOG_INFO, "Input pin %d - %s\n", i, GetPhysicalPinName(lType));
         av_log(NULL, AV_LOG_INFO, "\tRelated in: %ld\n", lRelated);
@@ -97,26 +115,20 @@ HRESULT SetupCrossbarOptions(IAMCrossbar *pXBar, int video_input_pin, int audio_
     return S_OK;
 }
 
-extern "C" {
-
-/* todo return hresult, log warning if unable to show */
-
 void show_properties(IBaseFilter *pFilter) {
-/* Obtain the filter's IBaseFilter interface. (Not shown) */
 ISpecifyPropertyPages *pProp;
-HRESULT hr = pFilter->QueryInterface(IID_ISpecifyPropertyPages, (void **)&pProp);
+HRESULT hr = IBaseFilter_QueryInterface(pFilter, &IID_ISpecifyPropertyPages, (void **)&pProp);
 if (SUCCEEDED(hr)) 
 {
-    // Get the filter's name and IUnknown pointer.
     FILTER_INFO FilterInfo;
-    hr = pFilter->QueryFilterInfo(&FilterInfo); 
     IUnknown *pFilterUnk;
-    pFilter->QueryInterface(IID_IUnknown, (void **)&pFilterUnk);
-
-    // Show the page. 
     CAUUID caGUID;
-    pProp->GetPages(&caGUID);
-    pProp->Release();
+
+    hr = IBaseFilter_QueryFilterInfo(pFilter, &FilterInfo); 
+    IBaseFilter_QueryInterface(pFilter, &IID_IUnknown, (void **)&pFilterUnk);
+    // Show the page. 
+    ISpecifyPropertyPages_GetPages(pProp, &caGUID);
+    ISpecifyPropertyPages_Release(pProp);
     OleCreatePropertyFrame(
         NULL,                   // Parent window
         0, 0,                   // Reserved
@@ -130,28 +142,29 @@ if (SUCCEEDED(hr))
     );
 
     // Clean up.
-    pFilterUnk->Release();
+    IUnknown_Release(pFilterUnk);
     if (FilterInfo.pGraph)
-      FilterInfo.pGraph->Release(); 
+      IFilterGraph_Release(FilterInfo.pGraph); 
     CoTaskMemFree(caGUID.pElems);
+} else {
+	av_log(NULL, AV_LOG_WARNING, "unable to show properties for requested filter");
 }
 }
 
-    HRESULT setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFilter *device_filter, 
-        int crossbar_video_input_pin_number, int crossbar_audio_input_pin_number, const char *device_name) {
-        IAMCrossbar *pCrossBar = NULL;
-        HRESULT r;
-        r = graph_builder2->FindInterface(&LOOK_UPSTREAM_ONLY, (const GUID *) NULL,
-                (IBaseFilter *) device_filter, IID_IAMCrossbar, (void**) &pCrossBar);
-        if (r == S_OK) {
-            /* It found a cross bar device was inserted, optionally configure it */
-            r = SetupCrossbarOptions(pCrossBar, crossbar_video_input_pin_number, 
-                crossbar_audio_input_pin_number, device_name);
-            pCrossBar->Release();
-        } else {
-            /* no crossbar to setup */
-            r = S_OK;
-        }
-        return r;
+HRESULT setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFilter *device_filter, 
+    int crossbar_video_input_pin_number, int crossbar_audio_input_pin_number, const char *device_name) {
+    IAMCrossbar *pCrossBar = NULL;
+    HRESULT r;
+    r = ICaptureGraphBuilder2_FindInterface(graph_builder2, &LOOK_UPSTREAM_ONLY, (const GUID *) NULL,
+            (IBaseFilter *) device_filter, &IID_IAMCrossbar, (void**) &pCrossBar);
+    if (r == S_OK) {
+        /* It found a cross bar device was inserted, optionally configure it */
+        r = SetupCrossbarOptions(pCrossBar, crossbar_video_input_pin_number, 
+            crossbar_audio_input_pin_number, device_name);
+        IAMCrossbar_Release(pCrossBar);
+    } else {
+        /* no crossbar to setup */
+        r = S_OK;
     }
+    return r;
 }
