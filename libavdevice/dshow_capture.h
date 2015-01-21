@@ -286,8 +286,8 @@ libAVFilter         *libAVFilter_Create (void *, void *, enum dshowDeviceType);
  * CrossBar
  ****************************************************************************/
 
-HRESULT setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFilter *device_filter, 
+HRESULT dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFilter *device_filter, 
     int video_input_pin, int audio_input_pin, const char *device_name);
 
-    void show_properties(IBaseFilter *pFilter);
+    void dshow_show_filter_properties(IBaseFilter *pFilter);
 #endif /* AVDEVICE_DSHOW_H */

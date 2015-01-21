@@ -575,7 +575,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     int should_show_properties = (devtype == VideoDevice) ? ctx->video_show_properties : ctx->audio_show_properties;
     
     if (should_show_properties)
-        show_properties(device_filter); 
+        dshow_show_filter_properties(device_filter); 
 
     r = IBaseFilter_EnumPins(device_filter, &pins);
     if (r != S_OK) {
@@ -790,7 +790,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         goto error;
     }
 
-    r = setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_number, 
+    r = dshow_try_setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_number, 
         ctx->crossbar_audio_input_number, ctx->device_name[devtype]);
 
     if (r != S_OK) {
