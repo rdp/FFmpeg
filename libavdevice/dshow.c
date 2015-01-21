@@ -46,6 +46,7 @@ struct dshow_ctx {
     char *audio_pin_name;
     int   show_video_device_properties;
     int   show_audio_device_properties;
+    int   show_crossbar_connection_properties;
 
     IBaseFilter *device_filter[2];
     IPin        *device_pin[2];
@@ -837,7 +838,8 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     }
 
     r = dshow_try_setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_pin_number,
-        ctx->crossbar_audio_input_pin_number, ctx->device_name[devtype], ctx->list_options, avctx);
+        ctx->crossbar_audio_input_pin_number, ctx->device_name[devtype], ctx->list_options, 
+        ctx->show_crossbar_connection_properties, avctx);
 
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not setup CrossBar\n");
@@ -1228,6 +1230,7 @@ static const AVOption options[] = {
     { "sample_rate", "set audio sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "sample_size", "set audio sample size", OFFSET(sample_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 16, DEC },
     { "channels", "set number of audio channels, such as 1 or 2", OFFSET(channels), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "audio_buffer_size", "set audio device buffer latency size in milliseconds (default is the device's default)", OFFSET(audio_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "list_devices", "list available devices", OFFSET(list_devices), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, DEC, "list_devices" },
     { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "list_devices" },
     { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "list_devices" },
@@ -1246,7 +1249,9 @@ static const AVOption options[] = {
     { "show_audio_device_properties", "display property dialog for audio capture device", OFFSET(show_audio_device_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_audio_device_properties" },
     { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_audio_device_properties" },
     { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_audio_device_properties" },
-    { "audio_buffer_size", "set audio device buffer latency size in milliseconds (default is the device's default)", OFFSET(audio_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "show_crossbar_connection_properties", "display property dialog for crossbar connecting pins filter", OFFSET(show_crossbar_connection_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_crossbar_connection_properties" },
+    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_crossbar_connection_properties" },
+    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_crossbar_connection_properties" },
     { NULL },
 };
 

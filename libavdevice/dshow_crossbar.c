@@ -117,24 +117,38 @@ setup_crossbar_options(IAMCrossbar *pXBar, int video_input_pin, int audio_input_
 }
 
 /**
- * Given a fully constructed graph, check if there are CrossBar pins and configures them if so.
+ * Given a fully constructed graph, check if there is a cross bar filter, and configure its pins if so.
  */
 HRESULT
 dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFilter *device_filter,
     int crossbar_video_input_pin_number, int crossbar_audio_input_pin_number, const char *device_name,
-    int list_options, AVFormatContext *avctx) {
-    IAMCrossbar *pCrossBar = NULL;
-    HRESULT r;
-    r = ICaptureGraphBuilder2_FindInterface(graph_builder2, &LOOK_UPSTREAM_ONLY, (const GUID *) NULL,
-            (IBaseFilter *) device_filter, &IID_IAMCrossbar, (void**) &pCrossBar);
-    if (r == S_OK) {
-        /* It found a cross bar device, configure/list options it */
-        r = setup_crossbar_options(pCrossBar, crossbar_video_input_pin_number,
-            crossbar_audio_input_pin_number, device_name, list_options, avctx);
-        IAMCrossbar_Release(pCrossBar);
-    } else {
-        /* no crossbar to setup is OK */
-        r = S_OK;
+    int list_options, int show_crossbar_connection_properties, AVFormatContext *avctx) {
+    IAMCrossbar *cross_bar = NULL;
+    IBaseFilter *cross_bar_filter = NULL; 
+    HRESULT hr;
+
+    hr = ICaptureGraphBuilder2_FindInterface(graph_builder2, &LOOK_UPSTREAM_ONLY, (const GUID *) NULL,
+            (IBaseFilter *) device_filter, &IID_IAMCrossbar, (void**) &cross_bar);
+    if (hr != S_OK) {
+        /* no crossbar needed */
+        hr = S_OK;
+        goto end;
     }
-    return r;
+
+    hr = setup_crossbar_options(cross_bar, crossbar_video_input_pin_number,
+        crossbar_audio_input_pin_number, device_name, list_options, avctx);
+    if (hr != S_OK)
+        goto end;
+    if (show_crossbar_connection_properties) {
+        hr = IAMCrossbar_QueryInterface(cross_bar, &IID_IBaseFilter, &cross_bar_filter);
+        if (hr != S_OK)
+            goto end;
+        dshow_show_filter_properties(cross_bar_filter, avctx);
+    }
+end:
+    if (cross_bar)
+        IAMCrossbar_Release(cross_bar);
+    if (cross_bar_filter)
+        IBaseFilter_Release(cross_bar_filter);
+    return hr;
 }

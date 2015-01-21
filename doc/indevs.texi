@@ -227,24 +227,29 @@ Select video capture pin to use by name or alternative name.
 Select audio capture pin to use by name or alternative name.
 
 @item crossbar_video_input_pin_number
-Set video input pin number for crossbar device. This will be
+Select video input pin number for crossbar device. This will be
 routed to the crossbar device's Video Decoder output pin.
 
 @item crossbar_audio_input_pin_number
-Set audio input pin number for crossbar device. This will be
+Select audio input pin number for crossbar device. This will be
 routed to the crossbar device's Audio Decoder output pin.
 
 @item show_video_device_properties
-Before capture starts, popup a display dialog
+If set to @option{true}, before capture starts, popup a display dialog
 to the end user, allowing them to change video filter properties
 and configurations manually.
 Note that for crossbar devices, this may be necessary to toggle
 between PAL and NTSC input frame rates and sizes, etc.
 
 @item show_audio_device_properties
-Before capture starts, popup a display dialog
+If set to @option{true}, before capture starts, popup a display dialog
 to the end user, allowing them to change audio filter properties
 and configurations manually.
+
+@item show_crossbar_connection_properties
+If set to @option{true}, before capture starts, popup a display
+dialog to the end user, allowing them to manually
+modify crossbar pin routings.
 
 @end table
 
@@ -285,14 +290,16 @@ $ ffmpeg -list_options true -f dshow -i video="Camera"
 @item
 Specify pin names to capture by name or alternative name, specify alternative device name:
 @example
-$ ffmpeg -f dshow -video_pin_name 2 -audio_pin_name "Audio Out" -i video="/@cm/{6758761978234}":audio="Microphone" TODO
+$ ffmpeg -f dshow -video_pin_name 2 -audio_pin_name "Audio Out" -i video="/@cm/{6758761978234}":audio="Microphone" TODO real'ify
 @end example
 
 @item
 Configure a crossbar device, allow for adjusting video capture properties at startup:
 @example
 $ ffmpeg -f dshow -show_video_device_properties true -crossbar_video_input_pin_number 2 
--crossbar_audio_input_pin_number 5 -i video="AVerMedia Capture Device":audio="AVerMedia Capture Device" TODO
+    -show_crossbar_connection_properties true -crossbar_audio_input_pin_number 5 
+    -i video="AVerMedia Capture Device":audio="AVerMedia Capture Device"
+     TODO real'ify
 @end example
 
 @end itemize
