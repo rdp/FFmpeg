@@ -342,7 +342,7 @@ fail1:
 
     if (pfilter) {
         if (!device_filter) {
-            av_log(avctx, AV_LOG_ERROR, "Could not find %s device with name [%s] among devices of type %s.\n",
+            av_log(avctx, AV_LOG_ERROR, "Could not find %s device with name [%s] among source devices of type %s.\n",
                    devtypename, device_name, sourcetypename);
             return AVERROR(EIO);
         }
@@ -769,22 +769,22 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     libAVPin_AddRef(capture_filter->pin);
     capture_pin = capture_filter->pin;
     ctx->capture_pin[devtype] = capture_pin;
-	
+    
     r = CoCreateInstance(&CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
                          &IID_ICaptureGraphBuilder2, (void **) &graph_builder2);	
-	if (r != S_OK) {
+    if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not create CaptureGraphBuilder2\n");
         goto error;
     }
-	ICaptureGraphBuilder2_SetFiltergraph(graph_builder2, graph);
-	if (r != S_OK) {
+    ICaptureGraphBuilder2_SetFiltergraph(graph_builder2, graph);
+    if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not set graph for CaptureGraphBuilder2\n");
         goto error;
     }	
 
     r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) device_pin, NULL /* no intermediate filter */,
-		(IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
-	
+        (IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
+    
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not RenderStream to connect pins\n");
         goto error;
