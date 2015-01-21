@@ -622,7 +622,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         pin_buf = dup_wchar_to_utf8(pin_id);
 
         if (!ppin) {
-            av_log(avctx, AV_LOG_INFO, " Pin \"%s\" (alternative name \"%s\")\n", name_buf, pin_buf);
+            av_log(avctx, AV_LOG_INFO, " Pin \"%s\" (alternative pin name \"%s\")\n", name_buf, pin_buf);
             dshow_cycle_formats(avctx, devtype, pin, NULL);
             goto next;
         }
