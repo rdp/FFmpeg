@@ -65,26 +65,32 @@ setup_crossbar_options(IAMCrossbar *pXBar, int video_input_pin, int audio_input_
 
     av_log(avctx, log_level, "Crossbar Switching Information for %s:\n", device_name); /* TODO only log if show_options set */
     hr = IAMCrossbar_get_PinCounts(pXBar, &count_output, &count_input);
+    if (hr != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "unable to get crossbar pin counts\n");
+        return hr;
+    }
+
     for (i = 0; i < count_output; i++)
     {
         long related_pin = -1, pin_type = -1, route_to_pin = -1;
-
         hr = IAMCrossbar_get_CrossbarPinInfo(pXBar, FALSE, i, &related_pin, &pin_type);
         if (pin_type == PhysConn_Video_VideoDecoder) {
             /* assume there is only one "Video (and one Audio) Decoder" output pin, and it's all we care about routing to...for now */
             if (video_input_pin != -1) {
                 av_log(avctx, log_level, "routing video input from pin %d\n", video_input_pin);
-                if(IAMCrossbar_Route(pXBar, i, video_input_pin) != S_OK) {
-                    av_log(avctx, log_level, "unable to route video input from pin %d\n", video_input_pin);
+                hr = IAMCrossbar_Route(pXBar, i, video_input_pin);
+                if (hr != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "unable to route video input from pin %d\n", video_input_pin);
                     return AVERROR(EIO);
                 }
             }
         } else if (pin_type == PhysConn_Audio_AudioDecoder) {
             if (audio_input_pin != -1) {
                 av_log(avctx, log_level, "routing audio input from pin %d\n", audio_input_pin);
-                if(IAMCrossbar_Route(pXBar, i, audio_input_pin) != S_OK) {
-                    av_log(avctx, log_level, "unable to route audio input from pin %d\n", audio_input_pin);
-                    return AVERROR(EIO);
+                hr = IAMCrossbar_Route(pXBar, i, audio_input_pin);
+                if (hr != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "unable to route audio input from pin %d\n", audio_input_pin);
+                    return hr;
                 }
             }
         } else {
@@ -92,7 +98,10 @@ setup_crossbar_options(IAMCrossbar *pXBar, int video_input_pin, int audio_input_
         }
 
         hr = IAMCrossbar_get_IsRoutedTo(pXBar, i, &route_to_pin);
-
+        if (hr != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "unable to get crossbar is routed to from pin %d\n", i);
+            return hr;
+        }
         av_log(avctx, log_level, "  Crossbar Output pin %d: \"%s\" related output pin: %ld ", i, GetPhysicalPinName(pin_type), related_pin);
         av_log(avctx, log_level, "current input pin: %ld ", route_to_pin);
         av_log(avctx, log_level, "compatible input pins: ");
@@ -110,6 +119,10 @@ setup_crossbar_options(IAMCrossbar *pXBar, int video_input_pin, int audio_input_
     {
         long related_pin, pin_type;
         hr = IAMCrossbar_get_CrossbarPinInfo(pXBar, TRUE, i, &related_pin, &pin_type);
+        if (hr != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "unable to get crossbar info audio input from pin %d\n", i);
+            return hr;
+        }
         av_log(avctx, log_level, "  Crossbar Input pin %d - \"%s\" ", i, GetPhysicalPinName(pin_type));
         av_log(avctx, log_level, "related input pin: %ld\n", related_pin);
     }
@@ -140,7 +153,7 @@ dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFil
     if (hr != S_OK)
         goto end;
     if (show_crossbar_connection_properties) {
-        hr = IAMCrossbar_QueryInterface(cross_bar, &IID_IBaseFilter, &cross_bar_filter);
+        hr = IAMCrossbar_QueryInterface(cross_bar, &IID_IBaseFilter, (void **) &cross_bar_filter);
         if (hr != S_OK)
             goto end;
         dshow_show_filter_properties(cross_bar_filter, avctx);
