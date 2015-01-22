@@ -1094,7 +1094,7 @@ static int dshow_read_header(AVFormatContext *avctx)
     if (ctx->device_name[AudioDevice]) {
         if ((r = dshow_open_device(avctx, devenum, AudioDevice, AudioSourceDevice)) < 0 ||
             (r = dshow_add_device(avctx, AudioDevice)) < 0) {
-            av_log(avctx, AV_LOG_INFO, "Searching for audio device within video devices %s\n", ctx->device_name[AudioDevice]);
+            av_log(avctx, AV_LOG_INFO, "Searching for audio device within video devices for %s\n", ctx->device_name[AudioDevice]);
             /* see if there's a video source with an audio pin with the given audio name */
             if ((r = dshow_open_device(avctx, devenum, AudioDevice, VideoSourceDevice)) < 0 ||
                 (r = dshow_add_device(avctx, AudioDevice)) < 0) {

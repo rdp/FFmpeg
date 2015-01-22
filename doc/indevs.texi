@@ -290,14 +290,14 @@ $ ffmpeg -list_options true -f dshow -i video="Camera"
 @item
 Specify pin names to capture by name or alternative name, specify alternative device name:
 @example
-$ ffmpeg -f dshow -audio_pin_name "Audio Out" -video_pin_name 2 -i video="/@cm/{6758761978234}":audio="Microphone" TODO real'ify
+$ ffmpeg -f dshow -audio_pin_name "Audio Out" -video_pin_name 2 -i video=video="@device_pnp_\\?\pci#ven_1a0a&dev_6200&subsys_62021461&rev_01#4&e2c7dd6&0&00e1#{65e8773d-8f56-11d0-a3b9-00a0c9223196}\{ca465100-deb0-4d59-818f-8c477184adf6}":audio="Microphone"
 @end example
 
 @item
-Configure a crossbar device, allow for adjusting video capture properties at startup:
+Configure a crossbar device, allowing for adjusting video capture properties at startup:
 @example
-$ ffmpeg -f dshow -show_video_device_properties true -crossbar_video_input_pin_number 2 
-    -show_crossbar_connection_properties true -crossbar_audio_input_pin_number 5 
+$ ffmpeg -f dshow -show_video_device_properties true -crossbar_video_input_pin_number 0
+    -show_crossbar_connection_properties true -crossbar_audio_input_pin_number 3
     -i video="AVerMedia BDA Analog Capture":audio="AVerMedia BDA Analog Capture"
 @end example
 
