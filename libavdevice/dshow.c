@@ -1154,7 +1154,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         r = IMediaControl_GetState(control, 0, &pfs);
     }
     if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not run filter\n");
+        av_log(avctx, AV_LOG_ERROR, "Could not run graph (sometimes caused by a device already in use by different program)\n");
         goto error;
     }
 
