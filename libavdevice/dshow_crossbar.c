@@ -143,21 +143,22 @@ dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFil
     hr = ICaptureGraphBuilder2_FindInterface(graph_builder2, &LOOK_UPSTREAM_ONLY, (const GUID *) NULL,
             (IBaseFilter *) device_filter, &IID_IAMCrossbar, (void**) &cross_bar);
     if (hr != S_OK) {
-        /* no crossbar needed */
+        /* no crossbar found */
         hr = S_OK;
         goto end;
     }
 
-    hr = setup_crossbar_options(cross_bar, crossbar_video_input_pin_number,
-        crossbar_audio_input_pin_number, device_name, list_options, avctx);
-    if (hr != S_OK)
-        goto end;
     if (show_crossbar_connection_properties) {
         hr = IAMCrossbar_QueryInterface(cross_bar, &IID_IBaseFilter, (void **) &cross_bar_filter);
         if (hr != S_OK)
             goto end;
         dshow_show_filter_properties(cross_bar_filter, avctx);
     }
+    hr = setup_crossbar_options(cross_bar, crossbar_video_input_pin_number,
+        crossbar_audio_input_pin_number, device_name, list_options, avctx);
+    if (hr != S_OK)
+        goto end;
+    
 end:
     if (cross_bar)
         IAMCrossbar_Release(cross_bar);
