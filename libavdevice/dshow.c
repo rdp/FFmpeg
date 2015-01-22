@@ -264,7 +264,7 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
 
     const GUID *device_guid[2] = { &CLSID_VideoInputDeviceCategory,
                                    &CLSID_AudioInputDeviceCategory };
-    const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
+    const char *devtypename = (devtype == VideoDevice) ? "video" : "audio only";
     const char *sourcetypename = (sourcetype == VideoSourceDevice) ? "video" : "audio";
 
     r = ICreateDevEnum_CreateClassEnumerator(devenum, device_guid[sourcetype],
@@ -563,7 +563,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     int r;
 
     const GUID *mediatype[2] = { &MEDIATYPE_Video, &MEDIATYPE_Audio };
-    const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
+    const char *devtypename = (devtype == VideoDevice) ? "video" : "audio only";
     const char *sourcetypename = (sourcetype == VideoSourceDevice) ? "video" : "audio";
 
     int set_format = (devtype == VideoDevice && (ctx->framerate ||
@@ -1013,9 +1013,9 @@ static int dshow_read_header(AVFormatContext *avctx)
     }
 
     if (ctx->list_devices) {
-        av_log(avctx, AV_LOG_INFO, "DirectShow video devices (includes some devices that are both video and audio devices)\n");
+        av_log(avctx, AV_LOG_INFO, "DirectShow video devices (some video devices contain both video and audio, and may be specified for both types of input)\n");
         dshow_cycle_devices(avctx, devenum, VideoDevice, VideoSourceDevice, NULL);
-        av_log(avctx, AV_LOG_INFO, "DirectShow audio devices\n");
+        av_log(avctx, AV_LOG_INFO, "DirectShow audio only devices\n");
         dshow_cycle_devices(avctx, devenum, AudioDevice, AudioSourceDevice, NULL);
         ret = AVERROR_EXIT;
         goto error;
