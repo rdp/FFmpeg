@@ -40,13 +40,13 @@ struct dshow_ctx {
     int   list_options;
     int   list_devices;
     int   audio_buffer_size;
-    int   crossbar_video_input_number;
-    int   crossbar_audio_input_number;
+    int   crossbar_video_input_pin_number;
+    int   crossbar_audio_input_pin_number;
     char *video_pin_name;
     char *audio_pin_name;
-    int   video_show_properties;
-    int   audio_show_properties;
-
+    int   show_video_device_properties;
+    int   show_audio_device_properties;
+    int   show_crossbar_connection_properties;
 
     IBaseFilter *device_filter[2];
     IPin        *device_pin[2];
@@ -547,6 +547,53 @@ end:
 }
 
 /**
+ * Pops up a user dialog allowing them to adjust properties for the given filter, if possible.
+ */
+void
+dshow_show_filter_properties(IBaseFilter *device_filter, AVFormatContext *avctx) {
+    ISpecifyPropertyPages *property_pages = NULL;
+    IUnknown *device_filter_iunknown = NULL;
+    HRESULT hr;
+    FILTER_INFO filter_info = {0, 0};
+    CAUUID ca_guid = {0, 0};
+
+    hr  = IBaseFilter_QueryInterface(device_filter, &IID_ISpecifyPropertyPages, (void **)&property_pages);
+    if (hr != S_OK) {
+        av_log(avctx, AV_LOG_WARNING, "requested filter does not have a property page to show");
+        goto end;
+    }
+    hr = IBaseFilter_QueryFilterInfo(device_filter, &filter_info);
+    if (hr != S_OK) {
+        goto fail;
+    }
+    hr = IBaseFilter_QueryInterface(device_filter, &IID_IUnknown, (void **)&device_filter_iunknown);
+    if (hr != S_OK) {
+        goto fail;
+    }
+    hr = ISpecifyPropertyPages_GetPages(property_pages, &ca_guid);
+    if (hr != S_OK) {
+        goto fail;
+    }
+    hr = OleCreatePropertyFrame(NULL, 0, 0, filter_info.achName, 1, &device_filter_iunknown, ca_guid.cElems,
+        ca_guid.pElems, 0, 0, NULL);
+    if (hr != S_OK) {
+        goto fail;
+    }
+    goto end;
+fail:
+    av_log(avctx, AV_LOG_ERROR, "failure showing property pages for filter");
+end:
+    if (property_pages)
+        ISpecifyPropertyPages_Release(property_pages);
+    if (device_filter_iunknown)
+        IUnknown_Release(device_filter_iunknown);
+    if (filter_info.pGraph)
+        IFilterGraph_Release(filter_info.pGraph);
+    if (ca_guid.pElems)
+        CoTaskMemFree(ca_guid.pElems);
+}
+
+/**
  * Cycle through available pins using the device_filter device, of type
  * devtype, retrieve the first output pin and return the pointer to the
  * object found in *ppin.
@@ -572,8 +619,8 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
                                                  ctx->video_codec_id != AV_CODEC_ID_RAWVIDEO))
                   || (devtype == AudioDevice && (ctx->channels || ctx->sample_rate));
     int format_set = 0;
-    int should_show_properties = (devtype == VideoDevice) ? ctx->video_show_properties : ctx->audio_show_properties;
-    
+    int should_show_properties = (devtype == VideoDevice) ? ctx->show_video_device_properties : ctx->show_audio_device_properties;
+
     if (should_show_properties)
         dshow_show_filter_properties(device_filter, avctx); 
 
@@ -586,7 +633,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     if (!ppin) {
         av_log(avctx, AV_LOG_INFO, "DirectShow %s device options (from %s source devices)\n",
                devtypename, sourcetypename);
-    }            
+    }
 
     while (!device_pin && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
         IKsPropertySet *p = NULL;
@@ -599,7 +646,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         wchar_t *pin_id = NULL;
         char *pin_buf = NULL;
         char *desired_pin_name = devtype == VideoDevice ? ctx->video_pin_name : ctx->audio_pin_name;
-    
+
         IPin_QueryPinInfo(pin, &info);
         IBaseFilter_Release(info.pFilter);
 
@@ -626,7 +673,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
             dshow_cycle_formats(avctx, devtype, pin, NULL);
             goto next;
         }
-        
+
         if (desired_pin_name) {
             if(strcmp(name_buf, desired_pin_name) && strcmp(pin_buf, desired_pin_name)) {
                 av_log(avctx, AV_LOG_DEBUG, "skipping pin \"%s\" (\"%s\") != requested \"%s\"\n", 
@@ -769,7 +816,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     libAVPin_AddRef(capture_filter->pin);
     capture_pin = capture_filter->pin;
     ctx->capture_pin[devtype] = capture_pin;
-    
+
     r = CoCreateInstance(&CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
                          &IID_ICaptureGraphBuilder2, (void **) &graph_builder2);	
     if (r != S_OK) {
@@ -790,8 +837,9 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         goto error;
     }
 
-    r = dshow_try_setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_number, 
-        ctx->crossbar_audio_input_number, ctx->device_name[devtype], ctx->list_options, avctx);
+    r = dshow_try_setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_pin_number,
+        ctx->crossbar_audio_input_pin_number, ctx->device_name[devtype], ctx->list_options, 
+        ctx->show_crossbar_connection_properties, avctx);
 
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not setup CrossBar\n");
@@ -1021,7 +1069,6 @@ static int dshow_read_header(AVFormatContext *avctx)
         goto error;
     }
     if (ctx->list_options) {
-    
         if (ctx->device_name[VideoDevice])
             if ((r = dshow_list_device_options(avctx, devenum, VideoDevice, VideoSourceDevice))) {
                 ret = r;
@@ -1183,6 +1230,7 @@ static const AVOption options[] = {
     { "sample_rate", "set audio sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "sample_size", "set audio sample size", OFFSET(sample_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 16, DEC },
     { "channels", "set number of audio channels, such as 1 or 2", OFFSET(channels), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "audio_buffer_size", "set audio device buffer latency size in milliseconds (default is the device's default)", OFFSET(audio_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "list_devices", "list available devices", OFFSET(list_devices), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, DEC, "list_devices" },
     { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "list_devices" },
     { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "list_devices" },
@@ -1193,15 +1241,17 @@ static const AVOption options[] = {
     { "audio_device_number", "set audio device number for devices with same name (starts at 0)", OFFSET(audio_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "video_pin_name", "select video capture pin by name", OFFSET(video_pin_name),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0, AV_OPT_FLAG_ENCODING_PARAM },
     { "audio_pin_name", "select audio capture pin by name", OFFSET(audio_pin_name),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0, AV_OPT_FLAG_ENCODING_PARAM },
-    { "crossbar_video_input_number", "set video input pin number for crossbar devices", OFFSET(crossbar_video_input_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
-    { "crossbar_audio_input_number", "set audio input pin number for crossbar devices", OFFSET(crossbar_audio_input_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
-    { "show_video_device_properties_dialog", "display property dialog for video capture device", OFFSET(video_show_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_video_device_properties_dialog" },
-    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_video_device_properties_dialog" },
-    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_video_device_properties_dialog" },
-    { "show_audio_device_properties_dialog", "display property dialog for audio capture device", OFFSET(audio_show_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_audio_device_properties_dialog" },
-    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_audio_device_properties_dialog" },
-    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_audio_device_properties_dialog" },
-    { "audio_buffer_size", "set audio device buffer latency size in milliseconds (default is the device's default)", OFFSET(audio_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "crossbar_video_input_pin_number", "set video input pin number for crossbar device", OFFSET(crossbar_video_input_pin_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
+    { "crossbar_audio_input_pin_number", "set audio input pin number for crossbar device", OFFSET(crossbar_audio_input_pin_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
+    { "show_video_device_properties", "display property dialog for video capture device", OFFSET(show_video_device_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_video_device_properties" },
+    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_video_device_properties" },
+    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_video_device_properties" },
+    { "show_audio_device_properties", "display property dialog for audio capture device", OFFSET(show_audio_device_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_audio_device_properties" },
+    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_audio_device_properties" },
+    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_audio_device_properties" },
+    { "show_crossbar_connection_properties", "display property dialog for crossbar connecting pins filter", OFFSET(show_crossbar_connection_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_crossbar_connection_properties" },
+    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_crossbar_connection_properties" },
+    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_crossbar_connection_properties" },
     { NULL },
 };
 
