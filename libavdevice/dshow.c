@@ -554,8 +554,8 @@ dshow_show_filter_properties(IBaseFilter *device_filter, AVFormatContext *avctx)
     ISpecifyPropertyPages *property_pages = NULL;
     IUnknown *device_filter_iunknown = NULL;
     HRESULT hr;
-    FILTER_INFO filter_info = {0, 0};
-    CAUUID ca_guid = {0, 0};
+    FILTER_INFO filter_info = {0}; /* a warning on this line is false positive GCC bug 53119 */
+    CAUUID ca_guid = {0};
 
     hr  = IBaseFilter_QueryInterface(device_filter, &IID_ISpecifyPropertyPages, (void **)&property_pages);
     if (hr != S_OK) {
@@ -631,7 +631,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     }
 
     if (!ppin) {
-        av_log(avctx, AV_LOG_INFO, "DirectShow %s device options (from %s source devices)\n",
+        av_log(avctx, AV_LOG_INFO, "DirectShow %s device options (from %s devices)\n",
                devtypename, sourcetypename);
     }
 
@@ -1061,9 +1061,9 @@ static int dshow_read_header(AVFormatContext *avctx)
     }
 
     if (ctx->list_devices) {
-        av_log(avctx, AV_LOG_INFO, "DirectShow video devices (some video devices contain both video and audio, and may be specified for both types of input)\n");
+        av_log(avctx, AV_LOG_INFO, "DirectShow video devices (some may be both video and audio devices)\n");
         dshow_cycle_devices(avctx, devenum, VideoDevice, VideoSourceDevice, NULL);
-        av_log(avctx, AV_LOG_INFO, "DirectShow audio only devices\n");
+        av_log(avctx, AV_LOG_INFO, "DirectShow audio devices\n");
         dshow_cycle_devices(avctx, devenum, AudioDevice, AudioSourceDevice, NULL);
         ret = AVERROR_EXIT;
         goto error;

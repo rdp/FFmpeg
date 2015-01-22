@@ -93,7 +93,7 @@ setup_crossbar_options(IAMCrossbar *pXBar, int video_input_pin, int audio_input_
 
         hr = IAMCrossbar_get_IsRoutedTo(pXBar, i, &route_to_pin);
 
-        av_log(avctx, log_level, "Crossbar Output pin %d: \"%s\" related output pin: %ld ", i, GetPhysicalPinName(pin_type), related_pin);
+        av_log(avctx, log_level, "  Crossbar Output pin %d: \"%s\" related output pin: %ld ", i, GetPhysicalPinName(pin_type), related_pin);
         av_log(avctx, log_level, "current input pin: %ld ", route_to_pin);
         av_log(avctx, log_level, "compatible input pins: ");
 
@@ -110,7 +110,7 @@ setup_crossbar_options(IAMCrossbar *pXBar, int video_input_pin, int audio_input_
     {
         long related_pin, pin_type;
         hr = IAMCrossbar_get_CrossbarPinInfo(pXBar, TRUE, i, &related_pin, &pin_type);
-        av_log(avctx, log_level, "Crossbar input pin %d - \"%s\" ", i, GetPhysicalPinName(pin_type));
+        av_log(avctx, log_level, "  Crossbar Input pin %d - \"%s\" ", i, GetPhysicalPinName(pin_type));
         av_log(avctx, log_level, "related input pin: %ld\n", related_pin);
     }
     return S_OK;

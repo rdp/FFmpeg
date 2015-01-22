@@ -238,7 +238,7 @@ routed to the crossbar device's Audio Decoder output pin.
 If set to @option{true}, before capture starts, popup a display dialog
 to the end user, allowing them to change video filter properties
 and configurations manually.
-Note that for crossbar devices, this may be necessary to toggle
+Note that for crossbar devices, this may be needed at times to toggle
 between PAL and NTSC input frame rates and sizes, etc.
 
 @item show_audio_device_properties
@@ -290,7 +290,7 @@ $ ffmpeg -list_options true -f dshow -i video="Camera"
 @item
 Specify pin names to capture by name or alternative name, specify alternative device name:
 @example
-$ ffmpeg -f dshow -video_pin_name 2 -audio_pin_name "Audio Out" -i video="/@cm/{6758761978234}":audio="Microphone" TODO real'ify
+$ ffmpeg -f dshow -audio_pin_name "Audio Out" -video_pin_name 2 -i video="/@cm/{6758761978234}":audio="Microphone" TODO real'ify
 @end example
 
 @item
@@ -298,8 +298,7 @@ Configure a crossbar device, allow for adjusting video capture properties at sta
 @example
 $ ffmpeg -f dshow -show_video_device_properties true -crossbar_video_input_pin_number 2 
     -show_crossbar_connection_properties true -crossbar_audio_input_pin_number 5 
-    -i video="AVerMedia Capture Device":audio="AVerMedia Capture Device"
-     TODO real'ify
+    -i video="AVerMedia BDA Analog Capture":audio="AVerMedia BDA Analog Capture"
 @end example
 
 @end itemize
