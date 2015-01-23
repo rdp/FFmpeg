@@ -669,10 +669,8 @@ next:
             IKsPropertySet_Release(p);
         if (device_pin != pin)
             IPin_Release(pin);
-        if (name_buf)
-            av_free(name_buf);
-        if (pin_buf)
-            av_free(pin_buf);
+        av_free(name_buf);
+        av_free(pin_buf);
         if (pin_id)
             CoTaskMemFree(pin_id);
     }
