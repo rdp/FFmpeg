@@ -508,7 +508,7 @@ dshow_show_filter_properties(IBaseFilter *device_filter, AVFormatContext *avctx)
     ISpecifyPropertyPages *property_pages = NULL;
     IUnknown *device_filter_iunknown = NULL;
     HRESULT hr;
-    FILTER_INFO filter_info = {0}; /* a warning on this line is false positive GCC bug 53119 */
+    FILTER_INFO filter_info = {0}; /* a warning on this line is false positive GCC bug 53119 AFAICT */
     CAUUID ca_guid = {0};
 
     hr  = IBaseFilter_QueryInterface(device_filter, &IID_ISpecifyPropertyPages, (void **)&property_pages);
@@ -535,7 +535,7 @@ dshow_show_filter_properties(IBaseFilter *device_filter, AVFormatContext *avctx)
     }
     goto end;
 fail:
-    av_log(avctx, AV_LOG_ERROR, "failure showing property pages for filter");
+    av_log(avctx, AV_LOG_ERROR, "Failure showing property pages for filter");
 end:
     if (property_pages)
         ISpecifyPropertyPages_Release(property_pages);

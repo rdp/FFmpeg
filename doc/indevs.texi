@@ -239,7 +239,9 @@ If set to @option{true}, before capture starts, popup a display dialog
 to the end user, allowing them to change video filter properties
 and configurations manually.
 Note that for crossbar devices, this may be needed at times to toggle
-between PAL and NTSC input frame rates and sizes, etc.
+between PAL and NTSC input frame rates and sizes, etc.  Possibly 
+enabling different scan rates/frame rates and avoiding green bars at
+the bottom, etc.
 
 @item show_audio_device_dialog
 If set to @option{true}, before capture starts, popup a display dialog
