@@ -28,56 +28,6 @@
 #include "avdevice.h"
 #include "libavcodec/raw.h"
 
-struct dshow_ctx {
-    const AVClass *class;
-
-    IGraphBuilder *graph;
-
-    char *device_name[2];
-    int video_device_number;
-    int audio_device_number;
-
-    int   list_options;
-    int   list_devices;
-    int   audio_buffer_size;
-    int   crossbar_video_input_pin_number;
-    int   crossbar_audio_input_pin_number;
-    char *video_pin_name;
-    char *audio_pin_name;
-    int   show_video_device_dialog;
-    int   show_audio_device_dialog;
-    int   show_crossbar_connection_properties;
-
-    IBaseFilter *device_filter[2];
-    IPin        *device_pin[2];
-    libAVFilter *capture_filter[2];
-    libAVPin    *capture_pin[2];
-
-    HANDLE mutex;
-    HANDLE event[2]; /* event[0] is set by DirectShow
-                      * event[1] is set by callback() */
-    AVPacketList *pktl;
-
-    int eof;
-
-    int64_t curbufsize[2];
-    unsigned int video_frame_num;
-
-    IMediaControl *control;
-    IMediaEvent *media_event;
-
-    enum AVPixelFormat pixel_format;
-    enum AVCodecID video_codec_id;
-    char *framerate;
-
-    int requested_width;
-    int requested_height;
-    AVRational requested_framerate;
-
-    int sample_rate;
-    int sample_size;
-    int channels;
-};
 
 static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
 {
@@ -841,9 +791,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         goto error;
     }
 
-    r = dshow_try_setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_pin_number,
-        ctx->crossbar_audio_input_pin_number, ctx->device_name[devtype], ctx->list_options,
-        ctx->show_crossbar_connection_properties, avctx);
+    r = dshow_try_setup_crossbar_options(graph_builder2, device_filter, devtype, avctx);
 
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not setup CrossBar\n");
