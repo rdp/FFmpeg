@@ -44,8 +44,8 @@ struct dshow_ctx {
     int   crossbar_audio_input_pin_number;
     char *video_pin_name;
     char *audio_pin_name;
-    int   show_video_device_properties;
-    int   show_audio_device_properties;
+    int   show_video_device_dialog;
+    int   show_audio_device_dialog;
     int   show_crossbar_connection_properties;
 
     IBaseFilter *device_filter[2];
@@ -621,7 +621,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
                                                  ctx->video_codec_id != AV_CODEC_ID_RAWVIDEO))
                   || (devtype == AudioDevice && (ctx->channels || ctx->sample_rate));
     int format_set = 0;
-    int should_show_properties = (devtype == VideoDevice) ? ctx->show_video_device_properties : ctx->show_audio_device_properties;
+    int should_show_properties = (devtype == VideoDevice) ? ctx->show_video_device_dialog : ctx->show_audio_device_dialog;
 
     if (should_show_properties)
         dshow_show_filter_properties(device_filter, avctx); 
@@ -1245,12 +1245,12 @@ static const AVOption options[] = {
     { "audio_pin_name", "select audio capture pin by name", OFFSET(audio_pin_name),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0, AV_OPT_FLAG_ENCODING_PARAM },
     { "crossbar_video_input_pin_number", "set video input pin number for crossbar device", OFFSET(crossbar_video_input_pin_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
     { "crossbar_audio_input_pin_number", "set audio input pin number for crossbar device", OFFSET(crossbar_audio_input_pin_number), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, DEC },
-    { "show_video_device_properties", "display property dialog for video capture device", OFFSET(show_video_device_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_video_device_properties" },
-    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_video_device_properties" },
-    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_video_device_properties" },
-    { "show_audio_device_properties", "display property dialog for audio capture device", OFFSET(show_audio_device_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_audio_device_properties" },
-    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_audio_device_properties" },
-    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_audio_device_properties" },
+    { "show_video_device_dialog", "display property dialog for video capture device", OFFSET(show_video_device_dialog), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_video_device_dialog" },
+    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_video_device_dialog" },
+    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_video_device_dialog" },
+    { "show_audio_device_dialog", "display property dialog for audio capture device", OFFSET(show_audio_device_dialog), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_audio_device_dialog" },
+    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_audio_device_dialog" },
+    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_audio_device_dialog" },
     { "show_crossbar_connection_properties", "display property dialog for crossbar connecting pins filter", OFFSET(show_crossbar_connection_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_crossbar_connection_properties" },
     { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_crossbar_connection_properties" },
     { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_crossbar_connection_properties" },
