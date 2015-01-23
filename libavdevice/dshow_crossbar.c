@@ -135,8 +135,8 @@ setup_crossbar_options(IAMCrossbar *cross_bar, enum dshowDeviceType devtype, AVF
 /**
  * Given a fully constructed graph, check if there is a cross bar filter, and configure its pins if so.
  */
-HRESULT 
-dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, 
+HRESULT
+dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2,
     IBaseFilter *device_filter, enum dshowDeviceType devtype, AVFormatContext *avctx)
 {
     struct dshow_ctx *ctx = avctx->priv_data;
