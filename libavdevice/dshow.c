@@ -193,10 +193,12 @@ static int shall_we_drop(AVFormatContext *s, int index, enum dshowDeviceType dev
     static const uint8_t dropscore[] = {62, 75, 87, 100};
     const int ndropscores = FF_ARRAY_ELEMS(dropscore);
     unsigned int buffer_fullness = (ctx->curbufsize[index]*100)/s->max_picture_buffer;
+    const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
 
     if(dropscore[++ctx->video_frame_num%ndropscores] <= buffer_fullness) {
         av_log(s, AV_LOG_ERROR,
-              "real-time buffer[%s] too full (%d%% of size: %d)! frame dropped!\n", ctx->device_name[devtype], buffer_fullness, s->max_picture_buffer);
+              "real-time buffer [%s] [%s input] too full or near too full (%d%% of size: %d [rtbufsize parameter])! frame dropped!\n", 
+              ctx->device_name[devtype], devtypename, buffer_fullness, s->max_picture_buffer);
         return 1;
     }
 
@@ -1094,7 +1096,7 @@ static int dshow_read_header(AVFormatContext *avctx)
     if (ctx->device_name[AudioDevice]) {
         if ((r = dshow_open_device(avctx, devenum, AudioDevice, AudioSourceDevice)) < 0 ||
             (r = dshow_add_device(avctx, AudioDevice)) < 0) {
-            av_log(avctx, AV_LOG_INFO, "Searching for audio device within video devices for %s\n", ctx->device_name[AudioDevice]);
+            av_log(avctx, AV_LOG_INFO, "Searching for audio device within video devices %s\n", ctx->device_name[AudioDevice]);
             /* see if there's a video source with an audio pin with the given audio name */
             if ((r = dshow_open_device(avctx, devenum, AudioDevice, VideoSourceDevice)) < 0 ||
                 (r = dshow_add_device(avctx, AudioDevice)) < 0) {
@@ -1104,7 +1106,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         }
     }
     if (ctx->list_options) {
-        /* allow it to list dshow crossbar options in dshow_open_device */
+        /* allow it to list crossbar options in dshow_open_device */
         ret = AVERROR_EXIT;
         goto error;
     }
@@ -1154,7 +1156,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         r = IMediaControl_GetState(control, 0, &pfs);
     }
     if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not run graph (sometimes caused by a device already in use by different program)\n");
+        av_log(avctx, AV_LOG_ERROR, "Could not run filter\n");
         goto error;
     }
 
