@@ -137,7 +137,7 @@ dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFil
     int crossbar_video_input_pin_number, int crossbar_audio_input_pin_number, const char *device_name,
     int list_options, int show_crossbar_connection_properties, AVFormatContext *avctx) {
     IAMCrossbar *cross_bar = NULL;
-    IBaseFilter *cross_bar_filter = NULL; 
+    IBaseFilter *cross_bar_filter = NULL;
     HRESULT hr;
 
     hr = ICaptureGraphBuilder2_FindInterface(graph_builder2, &LOOK_UPSTREAM_ONLY, (const GUID *) NULL,
@@ -158,7 +158,7 @@ dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2, IBaseFil
         crossbar_audio_input_pin_number, device_name, list_options, avctx);
     if (hr != S_OK)
         goto end;
-    
+
 end:
     if (cross_bar)
         IAMCrossbar_Release(cross_bar);

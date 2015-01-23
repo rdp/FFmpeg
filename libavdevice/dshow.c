@@ -197,7 +197,7 @@ static int shall_we_drop(AVFormatContext *s, int index, enum dshowDeviceType dev
 
     if(dropscore[++ctx->video_frame_num%ndropscores] <= buffer_fullness) {
         av_log(s, AV_LOG_ERROR,
-              "real-time buffer [%s] [%s input] too full or near too full (%d%% of size: %d [rtbufsize parameter])! frame dropped!\n", 
+              "real-time buffer [%s] [%s input] too full or near too full (%d%% of size: %d [rtbufsize parameter])! frame dropped!\n",
               ctx->device_name[devtype], devtypename, buffer_fullness, s->max_picture_buffer);
         return 1;
     }
@@ -284,10 +284,10 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
         VARIANT var;
         IBindCtx *bind_ctx = NULL;
         LPOLESTR olestr = NULL;
-        LPMALLOC ppMalloc = NULL;
+        LPMALLOC co_malloc = NULL;
         int i;
-        
-        r = CoGetMalloc(1, &ppMalloc);
+
+        r = CoGetMalloc(1, &co_malloc);
         if (r = S_OK)
             goto fail1;
         r = CreateBindCtx(0, &bind_ctx);
@@ -301,9 +301,9 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
         /* replace ':' with '_' since we use : to delineate between sources */
         for (i = 0; i < strlen(unique_name); i++) {
             if (unique_name[i] == ':')
-                unique_name[i] = '_';  
+                unique_name[i] = '_';
         }
-            
+
         r = IMoniker_BindToStorage(m, 0, 0, &IID_IPropertyBag, (void *) &bag);
         if (r != S_OK)
             goto fail1;
@@ -331,10 +331,10 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
         }
 
 fail1:
-        if (olestr && ppMalloc)
-            IMalloc_Free(ppMalloc, olestr);
+        if (olestr && co_malloc)
+            IMalloc_Free(co_malloc, olestr);
         if (bind_ctx)
-            IBindCtx_Release(bind_ctx);        
+            IBindCtx_Release(bind_ctx);
         av_free(friendly_name);
         av_free(unique_name);
         if (bag)
@@ -626,7 +626,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     int should_show_properties = (devtype == VideoDevice) ? ctx->show_video_device_dialog : ctx->show_audio_device_dialog;
 
     if (should_show_properties)
-        dshow_show_filter_properties(device_filter, avctx); 
+        dshow_show_filter_properties(device_filter, avctx);
 
     r = IBaseFilter_EnumPins(device_filter, &pins);
     if (r != S_OK) {
@@ -680,8 +680,8 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
 
         if (desired_pin_name) {
             if(strcmp(name_buf, desired_pin_name) && strcmp(pin_buf, desired_pin_name)) {
-                av_log(avctx, AV_LOG_DEBUG, "skipping pin \"%s\" (\"%s\") != requested \"%s\"\n", 
-                    name_buf, pin_buf, desired_pin_name); 
+                av_log(avctx, AV_LOG_DEBUG, "skipping pin \"%s\" (\"%s\") != requested \"%s\"\n",
+                    name_buf, pin_buf, desired_pin_name);
                 goto next;
             }
         }
@@ -777,7 +777,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     IPin *device_pin = NULL;
     libAVPin *capture_pin = NULL;
     libAVFilter *capture_filter = NULL;
-    ICaptureGraphBuilder2 *graph_builder2 = NULL;	
+    ICaptureGraphBuilder2 *graph_builder2 = NULL;
     int ret = AVERROR(EIO);
     int r;
 
@@ -822,7 +822,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     ctx->capture_pin[devtype] = capture_pin;
 
     r = CoCreateInstance(&CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
-                         &IID_ICaptureGraphBuilder2, (void **) &graph_builder2);	
+                         &IID_ICaptureGraphBuilder2, (void **) &graph_builder2);
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not create CaptureGraphBuilder2\n");
         goto error;
@@ -835,14 +835,14 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
 
     r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) device_pin, NULL /* no intermediate filter */,
         (IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
-    
+
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not RenderStream to connect pins\n");
         goto error;
     }
 
     r = dshow_try_setup_crossbar_options(graph_builder2, device_filter, ctx->crossbar_video_input_pin_number,
-        ctx->crossbar_audio_input_pin_number, ctx->device_name[devtype], ctx->list_options, 
+        ctx->crossbar_audio_input_pin_number, ctx->device_name[devtype], ctx->list_options,
         ctx->show_crossbar_connection_properties, avctx);
 
     if (r != S_OK) {
@@ -853,7 +853,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     ret = 0;
 
 error:
-    if (graph_builder2 != NULL) 
+    if (graph_builder2 != NULL)
         ICaptureGraphBuilder2_Release(graph_builder2);
 
     return ret;
