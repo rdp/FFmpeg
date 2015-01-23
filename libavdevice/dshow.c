@@ -1199,9 +1199,9 @@ static const AVOption options[] = {
     { "show_audio_device_dialog", "display property dialog for audio capture device", OFFSET(show_audio_device_dialog), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_audio_device_dialog" },
     { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_audio_device_dialog" },
     { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_audio_device_dialog" },
-    { "show_crossbar_connection_properties", "display property dialog for crossbar connecting pins filter", OFFSET(show_crossbar_connection_properties), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_crossbar_connection_properties" },
-    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_crossbar_connection_properties" },
-    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_crossbar_connection_properties" },
+    { "show_crossbar_connection_dialog", "display property dialog for crossbar connecting pins filter", OFFSET(show_crossbar_connection_dialog), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC, "show_crossbar_connection_dialog" },
+    { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "show_crossbar_connection_dialog" },
+    { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "show_crossbar_connection_dialog" },
     { NULL },
 };
 

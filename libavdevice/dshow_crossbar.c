@@ -152,7 +152,7 @@ dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2,
         goto end;
     }
 
-    if (ctx->show_crossbar_connection_properties) {
+    if (ctx->show_crossbar_connection_dialog) {
         hr = IAMCrossbar_QueryInterface(cross_bar, &IID_IBaseFilter, (void **) &cross_bar_filter);
         if (hr != S_OK)
             goto end;

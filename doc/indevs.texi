@@ -234,19 +234,19 @@ routed to the crossbar device's Video Decoder output pin.
 Select audio input pin number for crossbar device. This will be
 routed to the crossbar device's Audio Decoder output pin.
 
-@item show_video_device_properties
+@item show_video_device_dialog
 If set to @option{true}, before capture starts, popup a display dialog
 to the end user, allowing them to change video filter properties
 and configurations manually.
 Note that for crossbar devices, this may be needed at times to toggle
 between PAL and NTSC input frame rates and sizes, etc.
 
-@item show_audio_device_properties
+@item show_audio_device_dialog
 If set to @option{true}, before capture starts, popup a display dialog
 to the end user, allowing them to change audio filter properties
 and configurations manually.
 
-@item show_crossbar_connection_properties
+@item show_crossbar_connection_dialog
 If set to @option{true}, before capture starts, popup a display
 dialog to the end user, allowing them to manually
 modify crossbar pin routings.
@@ -294,11 +294,10 @@ $ ffmpeg -f dshow -audio_pin_name "Audio Out" -video_pin_name 2 -i video=video="
 @end example
 
 @item
-Configure a crossbar device, allowing for adjusting video capture properties at startup:
+Configure a crossbar device, specifying crossbar pins, allow user to adjust video capture properties at startup:
 @example
-$ ffmpeg -f dshow -show_video_device_properties true -crossbar_video_input_pin_number 0
-    -show_crossbar_connection_properties true -crossbar_audio_input_pin_number 3
-    -i video="AVerMedia BDA Analog Capture":audio="AVerMedia BDA Analog Capture"
+$ ffmpeg -f dshow -show_video_device_dialog true -crossbar_video_input_pin_number 0
+     -crossbar_audio_input_pin_number 3 -i video="AVerMedia BDA Analog Capture":audio="AVerMedia BDA Analog Capture"
 @end example
 
 @end itemize
