@@ -327,7 +327,7 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
             }
         } else {
             av_log(avctx, AV_LOG_INFO, " \"%s\"\n", friendly_name);
-            av_log(avctx, AV_LOG_INFO, "    alternate name \"%s\"\n", unique_name);
+            av_log(avctx, AV_LOG_INFO, "    Alternative name \"%s\"\n", unique_name);
         }
 
 fail1:
@@ -673,7 +673,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         pin_buf = dup_wchar_to_utf8(pin_id);
 
         if (!ppin) {
-            av_log(avctx, AV_LOG_INFO, " Pin \"%s\" (alternate pin name \"%s\")\n", name_buf, pin_buf);
+            av_log(avctx, AV_LOG_INFO, " Pin \"%s\" (alternative pin name \"%s\")\n", name_buf, pin_buf);
             dshow_cycle_formats(avctx, devtype, pin, NULL);
             goto next;
         }
