@@ -22,7 +22,7 @@
 #ifndef AVDEVICE_DSHOW_H
 #define AVDEVICE_DSHOW_H
 
-#define DSHOWDEBUG 0
+#define DSHOWDEBUG 1
 
 #include "avdevice.h"
 
@@ -49,6 +49,7 @@ void ff_printGUID(const GUID *g);
 extern const AVClass *ff_dshow_context_class_ptr;
 #define dshowdebug(...) ff_dlog(&ff_dshow_context_class_ptr, __VA_ARGS__)
 
+
 static inline void nothing(void *foo)
 {
 }
@@ -67,6 +68,13 @@ enum dshowSourceFilterType {
     VideoSourceDevice = 0,
     AudioSourceDevice = 1,
 };
+
+enum dshowDtvFilterType {
+    NetworkTuner = 0,
+    ReceiverComponent = 1,
+};
+
+
 
 #define DECLARE_QUERYINTERFACE(class, ...)                                   \
 long WINAPI                                                                  \
@@ -309,6 +317,10 @@ struct dshow_ctx {
     char *audio_filter_save_file;
     char *video_filter_load_file;
     char *video_filter_save_file;
+    int   dtv;
+    char *receiver_component;
+    char *dtv_graph_file;
+    long   tune_freq;
 
     IBaseFilter *device_filter[2];
     IPin        *device_pin[2];

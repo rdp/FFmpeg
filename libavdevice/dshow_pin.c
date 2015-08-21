@@ -50,7 +50,7 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
 
     ff_print_AM_MEDIA_TYPE(type);
     if (devtype == VideoDevice) {
-        if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video))
+        if ( (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video)) || (IsEqualGUID(&type->formattype, &FORMAT_MPEG2_VIDEO)) )
             return VFW_E_TYPE_NOT_ACCEPTED;
     } else {
         if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio))
