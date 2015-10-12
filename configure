@@ -1950,6 +1950,8 @@ CONFIG_EXTRA="
     hpeldsp
     huffman
     huffyuvdsp
+    rzipenc
+    rzipdec
     huffyuvencdsp
     idctdsp
     iirfilter
@@ -2271,6 +2273,8 @@ hevc_qsv_decoder_select="hevc_mp4toannexb_bsf hevc_parser qsvdec hevc_qsv_hwacce
 hevc_qsv_encoder_select="qsvenc"
 huffyuv_decoder_select="bswapdsp huffyuvdsp llviddsp"
 huffyuv_encoder_select="bswapdsp huffman huffyuvencdsp llviddsp"
+rzip_encoder_select="lzo"
+rzip_decoder_select="lzo"
 iac_decoder_select="imc_decoder"
 imc_decoder_select="bswapdsp fft mdct sinewin"
 indeo3_decoder_select="hpeldsp"

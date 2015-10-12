@@ -202,6 +202,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER(HQ_HQA,            hq_hqa);
     REGISTER_DECODER(HQX,               hqx);
     REGISTER_ENCDEC (HUFFYUV,           huffyuv);
+    REGISTER_ENCDEC (RZIP,              rzip);
     REGISTER_DECODER(IDCIN,             idcin);
     REGISTER_DECODER(IFF_ILBM,          iff_ilbm);
     REGISTER_DECODER(INDEO2,            indeo2);
