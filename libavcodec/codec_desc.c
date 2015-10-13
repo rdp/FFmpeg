@@ -188,6 +188,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
+        .id        = AV_CODEC_ID_RZIP,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "RZIP",
+        .long_name = NULL_IF_CONFIG_SMALL("Rzip"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+    },
+    {
         .id        = AV_CODEC_ID_HUFFYUV,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "huffyuv",

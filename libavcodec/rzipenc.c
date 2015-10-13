@@ -1,8 +1,9 @@
+// for now enable like configure --extra-libs=-llzo2
 #include "rzip.h"
 #include "avcodec.h" // AV_CODEC_CAP_INTRA_ONLY
 #include "libavutil/opt.h" // AVOption
 #include "internal.h" // AV_CODEC_CAP_FRAME_THREADS
-
+#include <lzo/lzo1x.h>
 
 static const AVOption options[] = {
     { NULL },
@@ -21,14 +22,30 @@ static av_cold int encode_init(AVCodecContext *avctx)
     s->rzip_gop = 30*10; // 10s default, assuming x264 has good values :)
     if (avctx->gop_size > 0)
       s->rzip_gop = avctx->gop_size;
+    lzo_init();// XXXX threadsafe?
     return 0;
 }
 
 static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
-                        const AVFrame *pict, int *got_packet)
+                        const AVFrame *frame, int *got_packet)
 {
     RzipContext *s = avctx->priv_data;
-    // ...
+    int ret;
+    lzo_uint clen = 0; // compressed length
+    long tmp[LZO1X_MEM_COMPRESS]; // its temp working space, has to be this size I think
+    int incoming_size = avpicture_get_size(frame->format, frame->width, frame->height);
+
+    if (incoming_size < 0)
+        return incoming_size;
+
+    if ((ret = ff_alloc_packet2(avctx, pkt, incoming_size*2, 0)) < 0) // *2 in case compression inflates it
+        return ret;
+
+    lzo1x_1_compress(frame->data, incoming_size, pkt->data, &clen, tmp);
+    pkt->flags |= AV_PKT_FLAG_KEY;
+    pkt->size   = clen;
+    av_log(avctx, AV_LOG_VERBOSE, "compressing to lzo was %d -> %d (compressed)", incoming_size, clen);
+
     return 0;
 }
 
@@ -51,9 +68,9 @@ AVCodec ff_rzip_encoder = {
     .priv_class     = &class,
     .pix_fmts       = (const enum AVPixelFormat[]){
         //AV_PIX_FMT_YUV422P, AV_PIX_FMT_RGB32, AV_PIX_FMT_NONE
-        AV_PIX_FMT_RGB24
+        AV_PIX_FMT_RGB24, AV_PIX_FMT_NONE // none just means "end of list"
     },
-    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE | // multiple init method calls OK
+    .caps_internal  = //FF_CODEC_CAP_INIT_THREADSAFE | // multiple init method calls OK
                       FF_CODEC_CAP_INIT_CLEANUP, // still call close even if open failed
                       AV_CODEC_CAP_DELAY, // send a NULL at the end meaning "close it up"
 };

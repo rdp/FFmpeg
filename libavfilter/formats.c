@@ -586,7 +586,7 @@ int ff_parse_pixel_format(enum AVPixelFormat *ret, const char *arg, void *log_ct
     if (pix_fmt == AV_PIX_FMT_NONE) {
         pix_fmt = strtol(arg, &tail, 0);
         if (*tail || !av_pix_fmt_desc_get(pix_fmt)) {
-            av_log(log_ctx, AV_LOG_ERROR, "Invalid pixel format '%s'\n", arg);
+            av_log(log_ctx, AV_LOG_ERROR, "Invalid pixel format '%s' hello\n", arg);
             return AVERROR(EINVAL);
         }
     }
