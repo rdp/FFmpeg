@@ -1208,9 +1208,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
                 ret = AVERROR(ENOMEM);
                 goto end;
             }
-            printf("allocated it");
             if (codec->priv_class) {
-               printf("allocated it with opts");
                 *(const AVClass **)avctx->priv_data = codec->priv_class;
                 av_opt_set_defaults(avctx->priv_data);
             }

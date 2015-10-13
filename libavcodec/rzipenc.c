@@ -1,4 +1,4 @@
-// for now enable like configure --extra-libs=-llzo2
+// for now enable like configure --extra-libs=-llzo2 TODO
 #include "rzip.h"
 #include "avcodec.h" // AV_CODEC_CAP_INTRA_ONLY
 #include "libavutil/opt.h" // AVOption
@@ -22,31 +22,25 @@ static av_cold int encode_init(AVCodecContext *avctx)
     s->rzip_gop = 30*10; // 10s default, assuming x264 has good values :)
     if (avctx->gop_size > 0)
       s->rzip_gop = avctx->gop_size;
-    lzo_init();// XXXX threadsafe?
+    lzo_init(); // XXXX threadsafe?
+    av_log(avctx, AV_LOG_VERBOSE, "doing init\n");
     return 0;
 }
 
-static int encode_frame_rzip(AVCodecContext *avctx, AVPacket *pkt,
+static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                         const AVFrame *frame, int *got_packet)
 {
     RzipContext *s = avctx->priv_data;
     int ret;
     lzo_uint clen = 0; // compressed length
-    long tmp[LZO1X_1_MEM_COMPRESS]; // its temp working space, has to be this size
+    long tmp[LZO1X_1_MEM_COMPRESS]; // lzo temp working space, has to be this size
     int incoming_size = avpicture_get_size(frame->format, frame->width, frame->height);
-    int yo;
 
     if (incoming_size < 0)
         return incoming_size;
     if ((ret = ff_alloc_packet2(avctx, pkt, incoming_size + incoming_size/16 + 64 + 3, 0)) < 0) // extra data in case compression inflates it
         return ret;
    
-    av_log(avctx, AV_LOG_VERBOSE, "about to compress size %d\n", incoming_size);
-    for(yo = 0; yo < incoming_size; yo++) {
-      int b = frame->data[0][yo];
-      b = pkt->data[yo];
-    }
-    av_log(avctx, AV_LOG_VERBOSE, "done gauntlet %d\n", incoming_size);
     ret = lzo1x_1_compress(frame->data[0], incoming_size, pkt->data, &clen, tmp);
     if (ret != LZO_E_OK) {
       av_log(avctx, AV_LOG_INFO, "compression failed?");
@@ -55,6 +49,7 @@ static int encode_frame_rzip(AVCodecContext *avctx, AVPacket *pkt,
     pkt->flags |= AV_PKT_FLAG_KEY;
     pkt->size   = clen;
     av_log(avctx, AV_LOG_VERBOSE, "compressing to lzo was %d -> %d (compressed)\n", incoming_size, clen);
+    *got_packet = 1; // I gave you a packet
 
     return 0;
 }
@@ -72,8 +67,10 @@ AVCodec ff_rzip_encoder = {
     .id             = AV_CODEC_ID_RZIP,
     .priv_data_size = sizeof(RzipContext),
     .init           = encode_init,
-    .encode2        = encode_frame_rzip,
+    .encode2        = encode_frame,
     .close          = encode_end,
+     // AV_CODEC_CAP_FRAME_THREADS I think means "interleae threads" or something
+     // INTRA_ONLY I think means "no inter anything" between frames [?]
     .capabilities   = AV_CODEC_CAP_FRAME_THREADS | AV_CODEC_CAP_INTRA_ONLY,
     .priv_class     = &rzipclass,
     .pix_fmts       = (const enum AVPixelFormat[]){

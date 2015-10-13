@@ -5,7 +5,7 @@
 static av_cold int decode_init(AVCodecContext *avctx)
 {
     RzipContext *s = avctx->priv_data;
-// needed?    avctx->pix_fmt = AV_PIX_FMT_RGB24; // what does this mean, internal pix fmt?
+// needed?    avctx->pix_fmt = AV_PIX_FMT_RGB24; // what would this mean, internal pix fmt?
     return 0;
 }
 
@@ -26,7 +26,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
 
 AVCodec ff_rzip_decoder = {
     .name             = "rzip",
-    .long_name        = NULL_IF_CONFIG_SMALL("rzip"),
+    .long_name        = NULL_IF_CONFIG_SMALL("rzip [Roger zip] decoder"),
     .type             = AVMEDIA_TYPE_VIDEO,
     .id               = AV_CODEC_ID_RZIP,
     .priv_data_size   = sizeof(RzipContext),
