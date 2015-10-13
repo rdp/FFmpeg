@@ -18,8 +18,9 @@ static const AVClass class = {
 static av_cold int encode_init(AVCodecContext *avctx)
 {
     RzipContext *s = avctx->priv_data;
-    // ...
-
+    s->rzip_gop = 30*10; // 10s default, assuming x264 has good values :)
+    if (avctx->gop_size > 0)
+      s->rzip_gop = avctx->gop_size;
     return 0;
 }
 

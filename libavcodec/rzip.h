@@ -4,6 +4,7 @@
 #define AVCODEC_RZIP_H
 
 typedef struct RzipContext {
+  int rzip_gop;
 } RzipContext ;
 
 

@@ -205,6 +205,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_MJPEG,        MKTAG('Z', 'J', 'P', 'G') },
     { AV_CODEC_ID_MJPEG,        MKTAG('M', 'M', 'J', 'P') },
     { AV_CODEC_ID_HUFFYUV,      MKTAG('H', 'F', 'Y', 'U') },
+    { AV_CODEC_ID_RZIP,         MKTAG('R', 'Z', 'I', 'P') },
     { AV_CODEC_ID_FFVHUFF,      MKTAG('F', 'F', 'V', 'H') },
     { AV_CODEC_ID_CYUV,         MKTAG('C', 'Y', 'U', 'V') },
     { AV_CODEC_ID_RAWVIDEO,     MKTAG( 0 ,  0 ,  0 ,  0 ) },
