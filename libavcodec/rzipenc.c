@@ -52,7 +52,8 @@ AVCodec ff_rzip_encoder = {
         //AV_PIX_FMT_YUV422P, AV_PIX_FMT_RGB32, AV_PIX_FMT_NONE
         AV_PIX_FMT_RGB24
     },
-    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE |
-                      FF_CODEC_CAP_INIT_CLEANUP,
+    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE | // multiple init method calls OK
+                      FF_CODEC_CAP_INIT_CLEANUP, // still call close even if open failed
+                      AV_CODEC_CAP_DELAY, // send a NULL at the end meaning "close it up"
 };
 

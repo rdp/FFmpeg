@@ -32,7 +32,8 @@ AVCodec ff_rzip_decoder = {
     .init             = decode_init,
     .close            = decode_end,
     .decode           = decode_frame,
-    .capabilities     = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DRAW_HORIZ_BAND | // TODO
-                        AV_CODEC_CAP_FRAME_THREADS,
-//    .init_thread_copy = ONLY_IF_THREADS_ENABLED(decode_init_thread_copy), // TODO
+    .capabilities     =  AV_CODEC_CAP_EXPERIMENTAL | AV_CODEC_CAP_LOSSLESS  // TODO more, like pass it nulls for the last GOP batch [?]
+//AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DRAW_HORIZ_BAND | // TODO 
+ //                       AV_CODEC_CAP_FRAME_THREADS,
+//    .init_thread_copy = ONLY_IF_THREADS_ENABLED(decode_init_thread_copy), // ??
 };
