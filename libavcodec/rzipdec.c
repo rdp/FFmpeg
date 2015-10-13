@@ -5,7 +5,7 @@
 static av_cold int decode_init(AVCodecContext *avctx)
 {
     RzipContext *s = avctx->priv_data;
-    avctx->pix_fmt = AV_PIX_FMT_RGB24; // what does this mean, internal pix fmt?
+// needed?    avctx->pix_fmt = AV_PIX_FMT_RGB24; // what does this mean, internal pix fmt?
     return 0;
 }
 

@@ -9,7 +9,7 @@ static const AVOption options[] = {
     { NULL },
 };
 
-static const AVClass class = {
+static const AVClass rzipclass = {
     .class_name = "rzip",
     .item_name  = av_default_item_name,
     .option     = options,
@@ -41,10 +41,11 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     if ((ret = ff_alloc_packet2(avctx, pkt, incoming_size*2, 0)) < 0) // *2 in case compression inflates it
         return ret;
 
+    av_log(avctx, AV_LOG_VERBOSE, "about to compress size %d\n", incoming_size);
     lzo1x_1_compress(frame->data, incoming_size, pkt->data, &clen, tmp);
     pkt->flags |= AV_PKT_FLAG_KEY;
     pkt->size   = clen;
-    av_log(avctx, AV_LOG_VERBOSE, "compressing to lzo was %d -> %d (compressed)", incoming_size, clen);
+    av_log(avctx, AV_LOG_VERBOSE, "compressing to lzo was %d -> %d (compressed)\n", incoming_size, clen);
 
     return 0;
 }
@@ -57,7 +58,7 @@ static av_cold int encode_end(AVCodecContext *avctx)
 
 AVCodec ff_rzip_encoder = {
     .name           = "rzip",
-    .long_name      = NULL_IF_CONFIG_SMALL("RZIP [Roger Zip] Lossless"),
+    .long_name      = NULL_IF_CONFIG_SMALL("RZIP [Roger Zip] encoder"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_RZIP,
     .priv_data_size = sizeof(RzipContext),
@@ -65,13 +66,13 @@ AVCodec ff_rzip_encoder = {
     .encode2        = encode_frame,
     .close          = encode_end,
     .capabilities   = AV_CODEC_CAP_FRAME_THREADS | AV_CODEC_CAP_INTRA_ONLY,
-    .priv_class     = &class,
+    .priv_class     = &rzipclass,
     .pix_fmts       = (const enum AVPixelFormat[]){
         //AV_PIX_FMT_YUV422P, AV_PIX_FMT_RGB32, AV_PIX_FMT_NONE
         AV_PIX_FMT_RGB24, AV_PIX_FMT_NONE // none just means "end of list"
     },
-    .caps_internal  = //FF_CODEC_CAP_INIT_THREADSAFE | // multiple init method calls OK
-                      FF_CODEC_CAP_INIT_CLEANUP, // still call close even if open failed
-                      AV_CODEC_CAP_DELAY, // send a NULL at the end meaning "close it up"
+//    .caps_internal  = //FF_CODEC_CAP_INIT_THREADSAFE | // multiple init method calls OK
+ //                     FF_CODEC_CAP_INIT_CLEANUP | // still call close even if open failed
+  //                    AV_CODEC_CAP_DELAY, // send a NULL at the end meaning "close it up"
 };
 
