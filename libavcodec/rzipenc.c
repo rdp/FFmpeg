@@ -26,23 +26,26 @@ static av_cold int encode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
+static int encode_frame_rzip(AVCodecContext *avctx, AVPacket *pkt,
                         const AVFrame *frame, int *got_packet)
 {
     RzipContext *s = avctx->priv_data;
     int ret;
     lzo_uint clen = 0; // compressed length
-    long tmp[LZO1X_MEM_COMPRESS]; // its temp working space, has to be this size I think
+    long tmp[LZO1X_1_MEM_COMPRESS]; // its temp working space, has to be this size
     int incoming_size = avpicture_get_size(frame->format, frame->width, frame->height);
 
     if (incoming_size < 0)
         return incoming_size;
-
-    if ((ret = ff_alloc_packet2(avctx, pkt, incoming_size*2, 0)) < 0) // *2 in case compression inflates it
+    if ((ret = ff_alloc_packet2(avctx, pkt, incoming_size + incoming_size/16 + 64 + 3, 0)) < 0) // extra data in case compression inflates it
         return ret;
 
     av_log(avctx, AV_LOG_VERBOSE, "about to compress size %d\n", incoming_size);
-    lzo1x_1_compress(frame->data, incoming_size, pkt->data, &clen, tmp);
+    ret = lzo1x_1_compress(frame->data, incoming_size, pkt->data, &clen, tmp);
+    if (ret != LZO_E_OK) {
+      av_log(avctx, AV_LOG_INFO, "compression failed?");
+      return -1;
+    }
     pkt->flags |= AV_PKT_FLAG_KEY;
     pkt->size   = clen;
     av_log(avctx, AV_LOG_VERBOSE, "compressing to lzo was %d -> %d (compressed)\n", incoming_size, clen);
@@ -63,7 +66,7 @@ AVCodec ff_rzip_encoder = {
     .id             = AV_CODEC_ID_RZIP,
     .priv_data_size = sizeof(RzipContext),
     .init           = encode_init,
-    .encode2        = encode_frame,
+    .encode2        = encode_frame_rzip,
     .close          = encode_end,
     .capabilities   = AV_CODEC_CAP_FRAME_THREADS | AV_CODEC_CAP_INTRA_ONLY,
     .priv_class     = &rzipclass,
