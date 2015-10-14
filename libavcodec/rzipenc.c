@@ -1,4 +1,5 @@
 // for now enable like configure --extra-libs=-llzo2 TODO
+// TODO requires gpl [for now, with lzo that is...]
 #include "rzip.h"
 #include "avcodec.h" // AV_CODEC_CAP_INTRA_ONLY
 #include "libavutil/opt.h" // AVOption
@@ -7,7 +8,7 @@
 #include "libavutil/lzo.h"
 
 static const AVOption options[] = {
-    { NULL },
+    { NULL }, // gop is universal option
 };
 
 static const AVClass rzipclass = {
@@ -20,7 +21,7 @@ static const AVClass rzipclass = {
 static av_cold int encode_init(AVCodecContext *avctx)
 {
     //RzipContext *s = avctx->priv_data;
-    // no gop stuff yet, we're all gop
+    // no gop stuff yet, we're all i-frame all the time
     //s->rzip_gop = 30*10; // 10s default, assuming x264 has good values :)
     //if (avctx->gop_size > 0)
     //  s->rzip_gop = avctx->gop_size;
@@ -56,19 +57,7 @@ static int rdp_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     int outlen = incoming_size;
     int inlen = clen;
 
-    //ret = av_lzo1x_decode(pkt->data, &outlen, frame->data[0], &inlen); // todo make sure right size out [out final decomp, out, in, in]
-    //if (ret < 0) 
-    //  return ret;
-    //av_log(avctx, AV_LOG_VERBOSE, "decompressing it went to %d\n", outlen);
-
-    //outlen = incoming_size;
-    //inlen = clen;
-    //ret = lzo1x_decompress(frame->data[0], clen, pkt->data, &outlen, NULL); // from, from, ot, to
-    //if (ret < 0) 
-    //  return ret;
-    //av_log(avctx, AV_LOG_VERBOSE, "decompressing it went to %d with theirs\n", outlen);
-
-  *got_packet = 1; // I gave you a packet
+    *got_packet = 1; // I gave you a packet
 
     return 0;
 }
