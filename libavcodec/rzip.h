@@ -7,7 +7,8 @@
 
 typedef struct RzipContext {
   AVClass *class;
-  int rzip_gop;
+  //int rzip_gop;
+  int image_size; // decode only
 } RzipContext;
 
 #endif
