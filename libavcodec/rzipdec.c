@@ -14,7 +14,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     if (ret < 0)
         return ret;
 
-    avctx->pix_fmt = AV_PIX_FMT_BGR24;
+    avctx->pix_fmt = AV_PIX_FMT_RGB24;
 
     // everybody seems to just use "extradata" [XXXX adjust the main docu for the same yikes]
     // guess its stable for height/width as well...
