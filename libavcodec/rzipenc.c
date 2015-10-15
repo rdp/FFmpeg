@@ -26,7 +26,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
     //if (avctx->gop_size > 0)
     //  s->rzip_gop = avctx->gop_size;
     lzo_init(); // XXXX threadsafe? avoid multiples?
-    av_log(avctx, AV_LOG_VERBOSE, "doing init\n");
+    av_log(avctx, AV_LOG_INFO, "rzip encode_init\n");
     return 0;
 }
 
