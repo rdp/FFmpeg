@@ -42,14 +42,13 @@ static int rzip_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
 
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) // allocate us a buffer which matches expected output size, apparently
         return ret;
-    // XXXX set  AV_CODEC_CAP_DR1 apparently benign
 
-    av_log(avctx, AV_LOG_INFO, "decompressing size %d\n", inlen);
-    ret = av_lzo1x_decode(frame->data[0], &outlen, src, &inlen); // todo make sure right size out [out final decomp, out, in, in]
+    ret = av_lzo1x_decode(frame->data[0], &outlen, src, &inlen);
     if (ret < 0)
         return ret;
-    //outlen = expected_output_size;
-    av_log(avctx, AV_LOG_INFO, "decompressed from %d to %d (uncompressed) %d\n", avpkt->size, outlen, inlen); 
+    // this outlen is actually invalid, somehow, but still works
+    // av_log(avctx, AV_LOG_INFO, "decompressed from %d to %d (uncompressed) %d\n", avpkt->size, outlen, inlen); 
+    av_log(avctx, AV_LOG_VERBOSE, "decompressed from %d to (presumably) %d\n", avpkt->size, expected_output_size);
 
     frame->pict_type        = AV_PICTURE_TYPE_I;
     frame->key_frame        = 1;
@@ -69,7 +68,7 @@ AVCodec ff_rzip_decoder = {
     .decode           = rzip_decode_frame,
     .capabilities     =  AV_CODEC_CAP_EXPERIMENTAL | AV_CODEC_CAP_LOSSLESS 
                  | AV_CODEC_CAP_DR1  // allow customer buffer allocation, seems benign
-// TODO more?
+// TODO more? thread stuff?
 //AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DRAW_HORIZ_BAND | // TODO 
  //                       AV_CODEC_CAP_FRAME_THREADS,
 //    .init_thread_copy = ONLY_IF_THREADS_ENABLED(decode_init_thread_copy),
