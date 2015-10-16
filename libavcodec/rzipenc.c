@@ -78,8 +78,9 @@ AVCodec ff_rzip_encoder = {
     .encode2        = rdp_encode_frame,
     .close          = encode_end,
      // AV_CODEC_CAP_FRAME_THREADS I think means "interleae threads" or something
-     // INTRA_ONLY I think means "no inter anything" between frames [?]
-    .capabilities   = AV_CODEC_CAP_FRAME_THREADS | AV_CODEC_CAP_INTRA_ONLY | AV_CODEC_CAP_EXPERIMENTAL,
+     // INTRA_ONLY I think means "no inter anything" between frames [?] todo fix docu
+    .capabilities   = AV_CODEC_CAP_FRAME_THREADS | AV_CODEC_CAP_INTRA_ONLY | 
+                      AV_CODEC_CAP_EXPERIMENTAL | AV_CODEC_CAP_LOSSLESS,
     .priv_class     = &rzipclass,
     .pix_fmts       = (const enum AVPixelFormat[]){
         //AV_PIX_FMT_YUV422P, AV_PIX_FMT_RGB32, AV_PIX_FMT_NONE
