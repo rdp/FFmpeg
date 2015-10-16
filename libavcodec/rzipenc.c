@@ -6,6 +6,7 @@
 #include "internal.h" // AV_CODEC_CAP_FRAME_THREADS
 #include <lzo/lzo1x.h>
 #include "libavutil/lzo.h"
+#include "libavutil/mem.h" # av_malloc
 
 static const AVOption options[] = {
     { NULL }, // gop is universal option
@@ -25,10 +26,11 @@ static av_cold int encode_init(AVCodecContext *avctx)
     //s->rzip_gop = 30*10; // 10s default, assuming x264 has good values :)
     //if (avctx->gop_size > 0)
     //  s->rzip_gop = avctx->gop_size;
-    lzo_init(); // XXXX threadsafe? avoid multiples?
     av_log(avctx, AV_LOG_INFO, "rzip encode_init\n");
-    return 0;
+    return lzo_init(); // XXXX threadsafe? avoid multiples? TODO handle ret here
 }
+
+//#define USE_MORE_LZO_COMPRESSION
 
 static int rdp_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                         const AVFrame *frame, int *got_packet)
@@ -36,28 +38,39 @@ static int rdp_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     //RzipContext *s = avctx->priv_data;
     int ret;
     lzo_uint clen = 0; // compressed length
-    long tmp[LZO1X_1_MEM_COMPRESS]; // lzo temp working space, has to be this size
+#ifdef USE_MORE_LZO_COMPRESSION
+    long *tmp = av_malloc(LZO1X_999_MEM_COMPRESS);
+    int using_high = 1;
+#else
+    long *tmp = av_malloc(LZO1X_1_MEM_COMPRESS); // lzo temp working space, has to be this size
+    int using_high = 0;
+#endif
     int incoming_size = avpicture_get_size(frame->format, frame->width, frame->height);
-
     if (incoming_size < 0)
         return incoming_size;
+
     if ((ret = ff_alloc_packet2(avctx, pkt, incoming_size + incoming_size/16 + 64 + 3, 0)) < 0) // extra data in case compression inflates it
         return ret;
    
+#ifdef USE_MORE_LZO_COMPRESSION
+    ret = lzo1x_999_compress(frame->data[0], incoming_size, pkt->data, &clen, tmp);
+#else
     ret = lzo1x_1_compress(frame->data[0], incoming_size, pkt->data, &clen, tmp);
+#endif
+    av_log(avctx, AV_LOG_VERBOSE, "compressing to lzo was %d -> %lu (compressed) %d using_high=%d\n", incoming_size, clen, ret, using_high);
     if (ret != LZO_E_OK) {
       av_log(avctx, AV_LOG_INFO, "compression failed?");
       return -1;
     }
     pkt->flags |= AV_PKT_FLAG_KEY;
     pkt->size   = clen;
-    av_log(avctx, AV_LOG_VERBOSE, "compressing to lzo was %d -> %lu (compressed)\n", incoming_size, clen);
 
 
     int outlen = incoming_size;
     int inlen = clen;
 
     *got_packet = 1; // I gave you a packet
+    av_free(tmp);
 
     return 0;
 }
