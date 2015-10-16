@@ -10,7 +10,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     //RzipContext *s = avctx->priv_data;
     int ret;
 
-    ret = av_image_check_size(avctx->width, avctx->height, 0, avctx); // ??
+    ret = av_image_check_size(avctx->width, avctx->height, 0, avctx);
     if (ret < 0)
         return ret;
 
@@ -18,7 +18,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     // everybody seems to just use "extradata" [XXXX adjust the main docu for the same yikes]
     // guess its stable for height/width as well...
-    // some use theh first few bytes [hrm...]
+    // some use the first few bytes of each frame [hrm...]
 
     return 0;
 }
