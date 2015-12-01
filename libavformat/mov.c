@@ -194,6 +194,14 @@ static int mov_read_covr(MOVContext *c, AVIOContext *pb, int type, int len)
     if (ret < 0)
         return ret;
 
+    if (pkt.size >= 8 && id != AV_CODEC_ID_BMP) {
+        if (AV_RB64(pkt.data) == 0x89504e470d0a1a0a) {
+            id = AV_CODEC_ID_PNG;
+        } else {
+            id = AV_CODEC_ID_MJPEG;
+        }
+    }
+
     st->disposition              |= AV_DISPOSITION_ATTACHED_PIC;
 
     st->attached_pic              = pkt;
@@ -265,6 +273,7 @@ static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     uint32_t data_type = 0, str_size, str_size_alloc;
     int (*parse)(MOVContext*, AVIOContext*, unsigned, const char*) = NULL;
     int raw = 0;
+    int num = 0;
 
     switch (atom.type) {
     case MKTAG( '@','P','R','M'): key = "premiere_version"; raw = 1; break;
@@ -368,6 +377,15 @@ retry:
                     av_log(c->fc, AV_LOG_ERROR, "Error parsing cover art.\n");
                 }
                 return ret;
+            } else if (!key && c->found_hdlr_mdta && c->meta_keys) {
+                uint32_t index = AV_RB32(&atom.type);
+                if (index < c->meta_keys_count) {
+                    key = c->meta_keys[index];
+                } else {
+                    av_log(c->fc, AV_LOG_WARNING,
+                           "The index of 'data' is out of range: %d >= %d.\n",
+                           index, c->meta_keys_count);
+                }
             }
         } else return 0;
     } else if (atom.size > 4 && key && !c->itunes_metadata && !raw) {
@@ -394,8 +412,10 @@ retry:
     if (atom.size < 0 || str_size >= INT_MAX/2)
         return AVERROR_INVALIDDATA;
 
+    // Allocates enough space if data_type is a float32 number, otherwise
     // worst-case requirement for output string in case of utf8 coded input
-    str_size_alloc = (raw ? str_size : str_size * 2) + 1;
+    num = (data_type == 23);
+    str_size_alloc = (num ? 512 : (raw ? str_size : str_size * 2)) + 1;
     str = av_mallocz(str_size_alloc);
     if (!str)
         return AVERROR(ENOMEM);
@@ -405,6 +425,14 @@ retry:
     else {
         if (!raw && (data_type == 3 || (data_type == 0 && (langcode < 0x400 || langcode == 0x7fff)))) { // MAC Encoded
             mov_read_mac_string(c, pb, str_size, str, str_size_alloc);
+        } else if (data_type == 23 && str_size >= 4) {  // BE float32
+            float val = av_int2float(avio_rb32(pb));
+            if (snprintf(str, str_size_alloc, "%f", val) >= str_size_alloc) {
+                av_log(c->fc, AV_LOG_ERROR,
+                       "Failed to store the float32 number (%f) in string.\n", val);
+                av_free(str);
+                return AVERROR_INVALIDDATA;
+            }
         } else {
             int ret = ffio_read_size(pb, str, str_size);
             if (ret < 0) {
@@ -434,6 +462,9 @@ static int mov_read_chpl(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     int i, nb_chapters, str_len, version;
     char str[256+1];
     int ret;
+
+    if (c->ignore_chapters)
+        return 0;
 
     if ((atom.size -= 5) < 0)
         return 0;
@@ -487,7 +518,7 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return AVERROR(ENOMEM);
     sc->drefs_count = entries;
 
-    for (i = 0; i < sc->drefs_count; i++) {
+    for (i = 0; i < entries; i++) {
         MOVDref *dref = &sc->drefs[i];
         uint32_t size = avio_rb32(pb);
         int64_t next = avio_tell(pb) + size - 4;
@@ -543,7 +574,7 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                 av_log(c->fc, AV_LOG_DEBUG, "type %d, len %d\n", type, len);
                 if (len&1)
                     len += 1;
-                if (type == 2 || type == 18) { // absolute path
+                if (type == 2) { // absolute path
                     av_free(dref->path);
                     dref->path = av_mallocz(len+1);
                     if (!dref->path)
@@ -554,15 +585,13 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                         av_freep(&dref->path);
                         return ret;
                     }
-                    if (type == 18) // no additional processing needed
-                        continue;
                     if (len > volume_len && !strncmp(dref->path, dref->volume, volume_len)) {
                         len -= volume_len;
                         memmove(dref->path, dref->path+volume_len, len);
                         dref->path[len] = 0;
                     }
                     for (j = 0; j < len; j++)
-                        if (dref->path[j] == ':')
+                        if (dref->path[j] == ':' || dref->path[j] == 0)
                             dref->path[j] = '/';
                     av_log(c->fc, AV_LOG_DEBUG, "path %s\n", dref->path);
                 } else if (type == 0) { // directory name
@@ -584,6 +613,11 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                 } else
                     avio_skip(pb, len);
             }
+        } else {
+            av_log(c->fc, AV_LOG_DEBUG, "Unknown dref type 0x08%x size %d\n",
+                   dref->type, size);
+            entries--;
+            i--;
         }
         avio_seek(pb, next, SEEK_SET);
     }
@@ -599,11 +633,6 @@ static int mov_read_hdlr(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     char *title_str;
     int ret;
 
-    if (c->fc->nb_streams < 1) // meta before first trak
-        return 0;
-
-    st = c->fc->streams[c->fc->nb_streams-1];
-
     avio_r8(pb); /* version */
     avio_rb24(pb); /* flags */
 
@@ -613,6 +642,15 @@ static int mov_read_hdlr(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     av_log(c->fc, AV_LOG_TRACE, "ctype= %.4s (0x%08x)\n", (char*)&ctype, ctype);
     av_log(c->fc, AV_LOG_TRACE, "stype= %.4s\n", (char*)&type);
+
+    if (c->fc->nb_streams < 1) {  // meta before first trak
+        if (type == MKTAG('m','d','t','a')) {
+            c->found_hdlr_mdta = 1;
+        }
+        return 0;
+    }
+
+    st = c->fc->streams[c->fc->nb_streams-1];
 
     if     (type == MKTAG('v','i','d','e'))
         st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
@@ -686,7 +724,7 @@ static int mov_read_dac3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return 0;
     st = c->fc->streams[c->fc->nb_streams-1];
 
-    ast = (enum AVAudioServiceType*)ff_stream_new_side_data(st, AV_PKT_DATA_AUDIO_SERVICE_TYPE,
+    ast = (enum AVAudioServiceType*)av_stream_new_side_data(st, AV_PKT_DATA_AUDIO_SERVICE_TYPE,
                                                             sizeof(*ast));
     if (!ast)
         return AVERROR(ENOMEM);
@@ -718,7 +756,7 @@ static int mov_read_dec3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return 0;
     st = c->fc->streams[c->fc->nb_streams-1];
 
-    ast = (enum AVAudioServiceType*)ff_stream_new_side_data(st, AV_PKT_DATA_AUDIO_SERVICE_TYPE,
+    ast = (enum AVAudioServiceType*)av_stream_new_side_data(st, AV_PKT_DATA_AUDIO_SERVICE_TYPE,
                                                             sizeof(*ast));
     if (!ast)
         return AVERROR(ENOMEM);
@@ -2521,6 +2559,10 @@ static int mov_read_stts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 static void mov_update_dts_shift(MOVStreamContext *sc, int duration)
 {
     if (duration < 0) {
+        if (duration == INT_MIN) {
+            av_log(NULL, AV_LOG_WARNING, "mov_update_dts_shift(): dts_shift set to %d\n", INT_MAX);
+            duration++;
+        }
         sc->dts_shift = FFMAX(sc->dts_shift, -duration);
     }
 }
@@ -3101,6 +3143,13 @@ static int mov_read_trak(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         break;
     }
 
+    // If the duration of the mp3 packets is not constant, then they could need a parser
+    if (st->codec->codec_id == AV_CODEC_ID_MP3
+        && sc->stts_count > 3
+        && sc->stts_count*10 > st->nb_frames
+        && sc->time_scale == st->codec->sample_rate) {
+            st->need_parsing = AVSTREAM_PARSE_FULL;
+    }
     /* Do not need those anymore. */
     av_freep(&sc->chunk_offsets);
     av_freep(&sc->stsc_data);
@@ -3121,6 +3170,48 @@ static int mov_read_ilst(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     ret = mov_read_default(c, pb, atom);
     c->itunes_metadata = 0;
     return ret;
+}
+
+static int mov_read_keys(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    uint32_t count;
+    uint32_t i;
+
+    if (atom.size < 8)
+        return 0;
+
+    avio_skip(pb, 4);
+    count = avio_rb32(pb);
+    if (count > UINT_MAX / sizeof(*c->meta_keys)) {
+        av_log(c->fc, AV_LOG_ERROR,
+               "The 'keys' atom with the invalid key count: %d\n", count);
+        return AVERROR_INVALIDDATA;
+    }
+
+    c->meta_keys_count = count + 1;
+    c->meta_keys = av_mallocz(c->meta_keys_count * sizeof(*c->meta_keys));
+    if (!c->meta_keys)
+        return AVERROR(ENOMEM);
+
+    for (i = 1; i <= count; ++i) {
+        uint32_t key_size = avio_rb32(pb);
+        uint32_t type = avio_rl32(pb);
+        if (key_size < 8) {
+            av_log(c->fc, AV_LOG_ERROR,
+                   "The key# %d in meta has invalid size: %d\n", i, key_size);
+            return AVERROR_INVALIDDATA;
+        }
+        key_size -= 8;
+        if (type != MKTAG('m','d','t','a')) {
+            avio_skip(pb, key_size);
+        }
+        c->meta_keys[i] = av_mallocz(key_size + 1);
+        if (!c->meta_keys[i])
+            return AVERROR(ENOMEM);
+        avio_read(pb, c->meta_keys[i], key_size);
+    }
+
+    return 0;
 }
 
 static int mov_read_custom_2plus(MOVContext *c, AVIOContext *pb, int size)
@@ -3330,9 +3421,8 @@ static int mov_read_tkhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if (width && height && sc->display_matrix) {
         double disp_transform[2];
 
-#define SQR(a) ((a)*(double)(a))
         for (i = 0; i < 2; i++)
-            disp_transform[i] = sqrt(SQR(display_matrix[i][0]) + SQR(display_matrix[i][1]));
+            disp_transform[i] = hypot(display_matrix[i][0], display_matrix[i][1]);
 
         if (disp_transform[0] > 0       && disp_transform[1] > 0 &&
             disp_transform[0] < (1<<24) && disp_transform[1] < (1<<24) &&
@@ -4067,6 +4157,14 @@ static int mov_read_default(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                        atom.type == MKTAG('i','l','s','t')))
             parse = mov_read_udta_string;
 
+        // Supports parsing the QuickTime Metadata Keys.
+        // https://developer.apple.com/library/mac/documentation/QuickTime/QTFF/Metadata/Metadata.html
+        if (!parse && c->found_hdlr_mdta &&
+            atom.type == MKTAG('m','e','t','a') &&
+            a.type == MKTAG('k','e','y','s')) {
+            parse = mov_read_keys;
+        }
+
         if (!parse) { /* skip leaf atoms data */
             avio_skip(pb, a.size);
         } else {
@@ -4348,6 +4446,13 @@ static int mov_read_close(AVFormatContext *s)
         mov->dv_fctx = NULL;
     }
 
+    if (mov->meta_keys) {
+        for (i = 1; i < mov->meta_keys_count; i++) {
+            av_freep(&mov->meta_keys[i]);
+        }
+        av_freep(&mov->meta_keys);
+    }
+
     av_freep(&mov->trex_data);
     av_freep(&mov->bitrates);
 
@@ -4536,7 +4641,7 @@ static int mov_read_header(AVFormatContext *s)
     av_log(mov->fc, AV_LOG_TRACE, "on_parse_exit_offset=%"PRId64"\n", avio_tell(pb));
 
     if (pb->seekable) {
-        if (mov->chapter_track > 0)
+        if (mov->chapter_track > 0 && !mov->ignore_chapters)
             mov_read_chapters(s);
         for (i = 0; i < s->nb_streams; i++)
             if (s->streams[i]->codec->codec_tag == AV_RL32("tmcd"))
@@ -4833,7 +4938,7 @@ static int mov_seek_fragment(AVFormatContext *s, AVStream *st, int64_t timestamp
 
     for (i = 0; i < mov->fragment_index_count; i++) {
         if (mov->fragment_index_data[i]->track_id == st->id) {
-            MOVFragmentIndex *index = index = mov->fragment_index_data[i];
+            MOVFragmentIndex *index = mov->fragment_index_data[i];
             for (j = index->item_count - 1; j >= 0; j--) {
                 if (index->items[j].time <= timestamp) {
                     if (index->items[j].headers_read)
@@ -4946,6 +5051,8 @@ static const AVOption mov_options[] = {
         OFFSET(seek_individually), AV_OPT_TYPE_INT, { .i64 = 1 },
         0, 1, FLAGS},
     {"ignore_editlist", "", OFFSET(ignore_editlist), AV_OPT_TYPE_INT, {.i64 = 0},
+        0, 1, FLAGS},
+    {"ignore_chapters", "", OFFSET(ignore_chapters), AV_OPT_TYPE_BOOL, {.i64 = 0},
         0, 1, FLAGS},
     {"use_mfra_for",
         "use mfra for fragment timestamps",

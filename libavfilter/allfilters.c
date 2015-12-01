@@ -45,6 +45,7 @@ void avfilter_register_all(void)
         return;
     initialized = 1;
 
+    REGISTER_FILTER(ACOMPRESSOR,    acompressor,    af);
     REGISTER_FILTER(ACROSSFADE,     acrossfade,     af);
     REGISTER_FILTER(ADELAY,         adelay,         af);
     REGISTER_FILTER(AECHO,          aecho,          af);
@@ -61,6 +62,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(APAD,           apad,           af);
     REGISTER_FILTER(APERMS,         aperms,         af);
     REGISTER_FILTER(APHASER,        aphaser,        af);
+    REGISTER_FILTER(AREALTIME,      arealtime,      af);
     REGISTER_FILTER(ARESAMPLE,      aresample,      af);
     REGISTER_FILTER(AREVERSE,       areverse,       af);
     REGISTER_FILTER(ASELECT,        aselect,        af);
@@ -72,7 +74,6 @@ void avfilter_register_all(void)
     REGISTER_FILTER(ASHOWINFO,      ashowinfo,      af);
     REGISTER_FILTER(ASPLIT,         asplit,         af);
     REGISTER_FILTER(ASTATS,         astats,         af);
-    REGISTER_FILTER(ASTREAMSYNC,    astreamsync,    af);
     REGISTER_FILTER(ASYNCTS,        asyncts,        af);
     REGISTER_FILTER(ATEMPO,         atempo,         af);
     REGISTER_FILTER(ATRIM,          atrim,          af);
@@ -86,6 +87,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(CHANNELSPLIT,   channelsplit,   af);
     REGISTER_FILTER(CHORUS,         chorus,         af);
     REGISTER_FILTER(COMPAND,        compand,        af);
+    REGISTER_FILTER(COMPENSATIONDELAY, compensationdelay, af);
     REGISTER_FILTER(DCSHIFT,        dcshift,        af);
     REGISTER_FILTER(DYNAUDNORM,     dynaudnorm,     af);
     REGISTER_FILTER(EARWAX,         earwax,         af);
@@ -108,10 +110,12 @@ void avfilter_register_all(void)
     REGISTER_FILTER(STEREOWIDEN,    stereowiden,    af);
     REGISTER_FILTER(TREBLE,         treble,         af);
     REGISTER_FILTER(TREMOLO,        tremolo,        af);
+    REGISTER_FILTER(VIBRATO,        vibrato,        af);
     REGISTER_FILTER(VOLUME,         volume,         af);
     REGISTER_FILTER(VOLUMEDETECT,   volumedetect,   af);
 
     REGISTER_FILTER(AEVALSRC,       aevalsrc,       asrc);
+    REGISTER_FILTER(ANOISESRC,      anoisesrc,      asrc);
     REGISTER_FILTER(ANULLSRC,       anullsrc,       asrc);
     REGISTER_FILTER(FLITE,          flite,          asrc);
     REGISTER_FILTER(SINE,           sine,           asrc);
@@ -217,6 +221,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(PULLUP,         pullup,         vf);
     REGISTER_FILTER(QP,             qp,             vf);
     REGISTER_FILTER(RANDOM,         random,         vf);
+    REGISTER_FILTER(REALTIME,       realtime,       vf);
     REGISTER_FILTER(REMOVEGRAIN,    removegrain,    vf);
     REGISTER_FILTER(REMOVELOGO,     removelogo,     vf);
     REGISTER_FILTER(REPEATFIELDS,   repeatfields,   vf);
@@ -236,6 +241,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(SETTB,          settb,          vf);
     REGISTER_FILTER(SHOWINFO,       showinfo,       vf);
     REGISTER_FILTER(SHOWPALETTE,    showpalette,    vf);
+    REGISTER_FILTER(SHUFFLEFRAMES,  shuffleframes,  vf);
     REGISTER_FILTER(SHUFFLEPLANES,  shuffleplanes,  vf);
     REGISTER_FILTER(SIGNALSTATS,    signalstats,    vf);
     REGISTER_FILTER(SMARTBLUR,      smartblur,      vf);
@@ -267,6 +273,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(YADIF,          yadif,          vf);
     REGISTER_FILTER(ZMQ,            zmq,            vf);
     REGISTER_FILTER(ZOOMPAN,        zoompan,        vf);
+    REGISTER_FILTER(ZSCALE,         zscale,         vf);
 
     REGISTER_FILTER(ALLRGB,         allrgb,         vsrc);
     REGISTER_FILTER(ALLYUV,         allyuv,         vsrc);
@@ -282,6 +289,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(SMPTEBARS,      smptebars,      vsrc);
     REGISTER_FILTER(SMPTEHDBARS,    smptehdbars,    vsrc);
     REGISTER_FILTER(TESTSRC,        testsrc,        vsrc);
+    REGISTER_FILTER(TESTSRC2,       testsrc2,       vsrc);
 
     REGISTER_FILTER(NULLSINK,       nullsink,       vsink);
 

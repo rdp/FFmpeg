@@ -742,8 +742,6 @@ static av_cold int nvenc_encode_init(AVCodecContext *avctx)
         switch (avctx->codec->id) {
         case AV_CODEC_ID_H264:
             ctx->encode_config.encodeCodecConfig.h264Config.idrPeriod = avctx->gop_size;
-            ctx->encode_config.encodeCodecConfig.h264Config.hierarchicalPFrames = 1;
-            ctx->encode_config.encodeCodecConfig.h264Config.hierarchicalBFrames = 1;
             break;
         case AV_CODEC_ID_H265:
             ctx->encode_config.encodeCodecConfig.hevcConfig.idrPeriod = avctx->gop_size;
@@ -768,8 +766,11 @@ static av_cold int nvenc_encode_init(AVCodecContext *avctx)
     if (ctx->encode_config.frameIntervalP >= 2)
         ctx->last_dts = -2;
 
-    if (avctx->bit_rate > 0)
+    if (avctx->bit_rate > 0) {
         ctx->encode_config.rcParams.averageBitRate = avctx->bit_rate;
+    } else if (ctx->encode_config.rcParams.averageBitRate > 0) {
+        ctx->encode_config.rcParams.maxBitRate = ctx->encode_config.rcParams.averageBitRate;
+    }
 
     if (avctx->rc_max_rate > 0)
         ctx->encode_config.rcParams.maxBitRate = avctx->rc_max_rate;
@@ -843,17 +844,20 @@ static av_cold int nvenc_encode_init(AVCodecContext *avctx)
 
         if(avctx->i_quant_factor != 0.0 && avctx->b_quant_factor != 0.0) {
             ctx->encode_config.rcParams.initialRCQP.qpIntra = qp_inter_p * fabs(avctx->i_quant_factor);
-            ctx->encode_config.rcParams.initialRCQP.qpIntra += qp_inter_p * avctx->i_quant_offset;
+            ctx->encode_config.rcParams.initialRCQP.qpIntra += avctx->i_quant_offset;
             ctx->encode_config.rcParams.initialRCQP.qpInterB = qp_inter_p * fabs(avctx->b_quant_factor);
-            ctx->encode_config.rcParams.initialRCQP.qpInterB += qp_inter_p * avctx->b_quant_offset;
+            ctx->encode_config.rcParams.initialRCQP.qpInterB += avctx->b_quant_offset;
         } else {
             ctx->encode_config.rcParams.initialRCQP.qpIntra = qp_inter_p;
             ctx->encode_config.rcParams.initialRCQP.qpInterB = qp_inter_p;
         }
     }
 
-    if (avctx->rc_buffer_size > 0)
+    if (avctx->rc_buffer_size > 0) {
         ctx->encode_config.rcParams.vbvBufferSize = avctx->rc_buffer_size;
+    } else if (ctx->encode_config.rcParams.averageBitRate > 0) {
+        ctx->encode_config.rcParams.vbvBufferSize = 2 * ctx->encode_config.rcParams.averageBitRate;
+    }
 
     if (avctx->flags & AV_CODEC_FLAG_INTERLACED_DCT) {
         ctx->encode_config.frameFieldMode = NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD;
@@ -913,6 +917,12 @@ static av_cold int nvenc_encode_init(AVCodecContext *avctx)
                 res = AVERROR(EINVAL);
                 goto error;
             }
+        }
+
+        // force setting profile as high444p if input is AV_PIX_FMT_YUV444P
+        if (avctx->pix_fmt == AV_PIX_FMT_YUV444P) {
+            ctx->encode_config.profileGUID = NV_ENC_H264_PROFILE_HIGH_444_GUID;
+            avctx->profile = FF_PROFILE_H264_HIGH_444_PREDICTIVE;
         }
 
         ctx->encode_config.encodeCodecConfig.h264Config.chromaFormatIDC = avctx->profile == FF_PROFILE_H264_HIGH_444_PREDICTIVE ? 3 : 1;
@@ -1453,10 +1463,10 @@ static const enum AVPixelFormat pix_fmts_nvenc[] = {
 #define OFFSET(x) offsetof(NvencContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
-    { "preset", "Set the encoding preset (one of slow = hq 2pass, medium = hq, fast = hp, hq, hp, bd, ll, llhq, llhp, default)", OFFSET(preset), AV_OPT_TYPE_STRING, { .str = "hq" }, 0, 0, VE },
-    { "profile", "Set the encoding profile (high, main or baseline)", OFFSET(profile), AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE },
-    { "level", "Set the encoding level restriction (auto, 1.0, 1.0b, 1.1, 1.2, ..., 4.2, 5.0, 5.1)", OFFSET(level), AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE },
-    { "tier", "Set the encoding tier (main or high)", OFFSET(tier), AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE },
+    { "preset", "Set the encoding preset (one of slow = hq 2pass, medium = hq, fast = hp, hq, hp, bd, ll, llhq, llhp, default)", OFFSET(preset), AV_OPT_TYPE_STRING, { .str = "medium" }, 0, 0, VE },
+    { "profile", "Set the encoding profile (high, main, baseline or high444p)", OFFSET(profile), AV_OPT_TYPE_STRING, { .str = "main" }, 0, 0, VE },
+    { "level", "Set the encoding level restriction (auto, 1.0, 1.0b, 1.1, 1.2, ..., 4.2, 5.0, 5.1)", OFFSET(level), AV_OPT_TYPE_STRING, { .str = "auto" }, 0, 0, VE },
+    { "tier", "Set the encoding tier (main or high)", OFFSET(tier), AV_OPT_TYPE_STRING, { .str = "main" }, 0, 0, VE },
     { "cbr", "Use cbr encoding mode", OFFSET(cbr), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     { "2pass", "Use 2pass encoding mode", OFFSET(twopass), AV_OPT_TYPE_BOOL, { .i64 = -1 }, -1, 1, VE },
     { "gpu", "Selects which NVENC capable GPU to use. First GPU is 0, second is 1, and so on.", OFFSET(gpu), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE },
@@ -1465,12 +1475,14 @@ static const AVOption options[] = {
 };
 
 static const AVCodecDefault nvenc_defaults[] = {
-    { "b", "0" },
+    { "b", "2M" },
     { "qmin", "-1" },
     { "qmax", "-1" },
     { "qdiff", "-1" },
     { "qblur", "-1" },
     { "qcomp", "-1" },
+    { "g", "250" },
+    { "bf", "0" },
     { NULL },
 };
 

@@ -133,7 +133,7 @@ static av_always_inline void decode_line(FFV1Context *s, int w,
 
         av_assert2(context < p->context_count);
 
-        if (s->ac) {
+        if (s->ac != AC_GOLOMB_RICE) {
             diff = get_symbol_inline(c, p->state[context], 1);
         } else {
             if (context == 0 && run_mode == 0)
@@ -408,6 +408,7 @@ static int decode_slice(AVCodecContext *c, void *arg)
         if (ff_ffv1_init_slice_state(f, fs) < 0)
             return AVERROR(ENOMEM);
         if (decode_slice_header(f, fs) < 0) {
+            fs->slice_x = fs->slice_y = fs->slice_height = fs->slice_width = 0;
             fs->slice_damaged = 1;
             return AVERROR_INVALIDDATA;
         }
@@ -422,7 +423,7 @@ static int decode_slice(AVCodecContext *c, void *arg)
     x      = fs->slice_x;
     y      = fs->slice_y;
 
-    if (!fs->ac) {
+    if (fs->ac == AC_GOLOMB_RICE) {
         if (f->version == 3 && f->micro_version > 1 || f->version > 3)
             get_rac(&fs->c, (uint8_t[]) { 129 });
         fs->ac_byte_count = f->version > 2 || (!x && !y) ? fs->c.bytestream - fs->c.bytestream_start - 1 : 0;
@@ -451,7 +452,7 @@ static int decode_slice(AVCodecContext *c, void *arg)
                                p->data[2] + ps * x + y * p->linesize[2] };
         decode_rgb_frame(fs, planes, width, height, p->linesize);
     }
-    if (fs->ac && f->version > 2) {
+    if (fs->ac != AC_GOLOMB_RICE && f->version > 2) {
         int v;
         get_rac(&fs->c, (uint8_t[]) { 129 });
         v = fs->c.bytestream_end - fs->c.bytestream - 2 - 5*f->ec;
@@ -538,8 +539,9 @@ static int read_extra_header(FFV1Context *f)
         if (f->micro_version < 0)
             return AVERROR_INVALIDDATA;
     }
-    f->ac = f->avctx->coder_type = get_symbol(c, state, 0);
-    if (f->ac > 1) {
+    f->ac = get_symbol(c, state, 0);
+
+    if (f->ac == AC_RANGE_CUSTOM_TAB) {
         for (i = 1; i < 256; i++)
             f->state_transition[i] = get_symbol(c, state, 1) + c->one_state[i];
     }
@@ -568,8 +570,11 @@ static int read_extra_header(FFV1Context *f)
     }
 
     f->quant_table_count = get_symbol(c, state, 0);
-    if (f->quant_table_count > (unsigned)MAX_QUANT_TABLES)
+    if (f->quant_table_count > (unsigned)MAX_QUANT_TABLES || !f->quant_table_count) {
+        av_log(f->avctx, AV_LOG_ERROR, "quant table count %d is invalid\n", f->quant_table_count);
+        f->quant_table_count = 0;
         return AVERROR_INVALIDDATA;
+    }
 
     for (i = 0; i < f->quant_table_count; i++) {
         f->context_count[i] = read_quant_tables(c, f->quant_tables[i]);
@@ -642,8 +647,9 @@ static int read_header(FFV1Context *f)
             return AVERROR_INVALIDDATA;
         }
         f->version = v;
-        f->ac      = f->avctx->coder_type = get_symbol(c, state, 0);
-        if (f->ac > 1) {
+        f->ac = get_symbol(c, state, 0);
+
+        if (f->ac == AC_RANGE_CUSTOM_TAB) {
             for (i = 1; i < 256; i++)
                 f->state_transition[i] = get_symbol(c, state, 1) + c->one_state[i];
         }
@@ -939,6 +945,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPac
         else                     v = buf_p - c->bytestream_start;
         if (buf_p - c->bytestream_start < v) {
             av_log(avctx, AV_LOG_ERROR, "Slice pointer chain broken\n");
+            ff_thread_report_progress(&f->picture, INT_MAX, 0);
             return AVERROR_INVALIDDATA;
         }
         buf_p -= v;
@@ -1132,4 +1139,5 @@ AVCodec ff_ffv1_decoder = {
     .update_thread_context = ONLY_IF_THREADS_ENABLED(update_thread_context),
     .capabilities   = AV_CODEC_CAP_DR1 /*| AV_CODEC_CAP_DRAW_HORIZ_BAND*/ |
                       AV_CODEC_CAP_FRAME_THREADS | AV_CODEC_CAP_SLICE_THREADS,
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP
 };

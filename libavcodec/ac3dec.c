@@ -185,7 +185,6 @@ static av_cold int ac3_decode_init(AVCodecContext *avctx)
 
     s->avctx = avctx;
 
-    ff_ac3_common_init();
     ac3_tables_init();
     ff_mdct_init(&s->imdct_256, 8, 1, 1.0);
     ff_mdct_init(&s->imdct_512, 9, 1, 1.0);
@@ -298,7 +297,7 @@ static int parse_frame_header(AC3DecodeContext *s)
     AC3HeaderInfo hdr, *phdr=&hdr;
     int err;
 
-    err = avpriv_ac3_parse_header2(&s->gbc, &phdr);
+    err = avpriv_ac3_parse_header(&s->gbc, &phdr);
     if (err)
         return err;
 

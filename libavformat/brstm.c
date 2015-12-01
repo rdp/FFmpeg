@@ -205,7 +205,7 @@ static int read_header(AVFormatContext *s)
     avio_skip(s->pb, 1); // padding
 
     st->codec->sample_rate = bfstm ? read32(s) : read16(s);
-    if (!st->codec->sample_rate)
+    if (st->codec->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
 
     if (!bfstm)
@@ -412,7 +412,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
             dst += size;
             avio_skip(s->pb, skip);
             if (ret != size) {
-                av_free_packet(pkt);
+                av_packet_unref(pkt);
                 break;
             }
         }

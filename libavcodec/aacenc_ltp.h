@@ -1,7 +1,6 @@
 /*
- * Header file for hardcoded AAC tables
- *
- * Copyright (c) 2010 Alex Converse <alex.converse@gmail.com>
+ * AAC encoder long term prediction extension
+ * Copyright (C) 2015 Rostislav Pehlivanov
  *
  * This file is part of FFmpeg.
  *
@@ -20,26 +19,23 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_AAC_TABLEGEN_H
-#define AVCODEC_AAC_TABLEGEN_H
+/**
+ * @file
+ * AAC encoder long term prediction extension
+ * @author Rostislav Pehlivanov ( atomnuker gmail com )
+ */
 
-#include "aac_tablegen_decl.h"
+#ifndef AVCODEC_AACENC_LTP_H
+#define AVCODEC_AACENC_LTP_H
 
-#if CONFIG_HARDCODED_TABLES
-#include "libavcodec/aac_tables.h"
-#else
-#include "libavutil/mathematics.h"
-float ff_aac_pow2sf_tab[428];
-float ff_aac_pow34sf_tab[428];
+#include "aacenc.h"
 
-av_cold void ff_aac_tableinit(void)
-{
-    int i;
-    for (i = 0; i < 428; i++) {
-        ff_aac_pow2sf_tab[i] = pow(2, (i - POW_SF2_ZERO) / 4.0);
-        ff_aac_pow34sf_tab[i] = pow(ff_aac_pow2sf_tab[i], 3.0/4.0);
-    }
-}
-#endif /* CONFIG_HARDCODED_TABLES */
+void ff_aac_encode_ltp_info(AACEncContext *s, SingleChannelElement *sce,
+                            int common_window);
+void ff_aac_update_ltp(AACEncContext *s, SingleChannelElement *sce);
+void ff_aac_adjust_common_ltp(AACEncContext *s, ChannelElement *cpe);
+void ff_aac_ltp_insert_new_frame(AACEncContext *s);
+void ff_aac_search_for_ltp(AACEncContext *s, SingleChannelElement *sce,
+                           int common_window);
 
-#endif /* AVCODEC_AAC_TABLEGEN_H */
+#endif /* AVCODEC_AACENC_LTP_H */

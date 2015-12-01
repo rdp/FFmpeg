@@ -21,7 +21,7 @@
 
 /**
  * @file
- * AAC encoder Intensity Stereo
+ * AAC encoder main-type prediction
  * @author Rostislav Pehlivanov ( atomnuker gmail com )
  */
 
@@ -148,7 +148,7 @@ static inline int update_counters(IndividualChannelStream *ics, int inc)
     return 0;
 }
 
-void ff_aac_adjust_common_prediction(AACEncContext *s, ChannelElement *cpe)
+void ff_aac_adjust_common_pred(AACEncContext *s, ChannelElement *cpe)
 {
     int start, w, w2, g, i, count = 0;
     SingleChannelElement *sce0 = &cpe->ch[0];
@@ -333,7 +333,8 @@ void ff_aac_encode_main_pred(AACEncContext *s, SingleChannelElement *sce)
     IndividualChannelStream *ics = &sce->ics;
     const int pmax = FFMIN(ics->max_sfb, ff_aac_pred_sfb_max[s->samplerate_index]);
 
-    if (!ics->predictor_present)
+    if (s->profile != FF_PROFILE_AAC_MAIN ||
+        !ics->predictor_present)
         return;
 
     put_bits(&s->pb, 1, !!ics->predictor_reset_group);

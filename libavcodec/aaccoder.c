@@ -44,10 +44,10 @@
 #include "aacenctab.h"
 #include "aacenc_utils.h"
 #include "aacenc_quantization.h"
-#include "aac_tablegen_decl.h"
 
 #include "aacenc_is.h"
 #include "aacenc_tns.h"
+#include "aacenc_ltp.h"
 #include "aacenc_pred.h"
 
 #include "libavcodec/aaccoder_twoloop.h"
@@ -886,8 +886,8 @@ static void search_for_ms(AACEncContext *s, ChannelElement *cpe)
                     }
                     cpe->ms_mask[w*16+g] = dist2 <= dist1 && B1 < B0;
                     if (cpe->ms_mask[w*16+g]) {
-                        /* Setting the M/S mask is useful with I/S, but only the flag */
-                        if (!cpe->is_mask[w*16+g]) {
+                        /* Setting the M/S mask is useful with I/S or PNS, but only the flag */
+                        if (!cpe->is_mask[w*16+g] && sce0->band_type[w*16+g] != NOISE_BT && sce1->band_type[w*16+g] != NOISE_BT) {
                             sce0->sf_idx[w*16+g] = mididx;
                             sce1->sf_idx[w*16+g] = sididx;
                             sce0->band_type[w*16+g] = midcb;
@@ -911,14 +911,19 @@ AACCoefficientsEncoder ff_aac_coders[AAC_CODER_NB] = {
         encode_window_bands_info,
         quantize_and_encode_band,
         ff_aac_encode_tns_info,
+        ff_aac_encode_ltp_info,
         ff_aac_encode_main_pred,
-        ff_aac_adjust_common_prediction,
+        ff_aac_adjust_common_pred,
+        ff_aac_adjust_common_ltp,
         ff_aac_apply_main_pred,
         ff_aac_apply_tns,
+        ff_aac_update_ltp,
+        ff_aac_ltp_insert_new_frame,
         set_special_band_scalefactors,
         search_for_pns,
         mark_pns,
         ff_aac_search_for_tns,
+        ff_aac_search_for_ltp,
         search_for_ms,
         ff_aac_search_for_is,
         ff_aac_search_for_pred,
@@ -928,14 +933,19 @@ AACCoefficientsEncoder ff_aac_coders[AAC_CODER_NB] = {
         encode_window_bands_info,
         quantize_and_encode_band,
         ff_aac_encode_tns_info,
+        ff_aac_encode_ltp_info,
         ff_aac_encode_main_pred,
-        ff_aac_adjust_common_prediction,
+        ff_aac_adjust_common_pred,
+        ff_aac_adjust_common_ltp,
         ff_aac_apply_main_pred,
         ff_aac_apply_tns,
+        ff_aac_update_ltp,
+        ff_aac_ltp_insert_new_frame,
         set_special_band_scalefactors,
         search_for_pns,
         mark_pns,
         ff_aac_search_for_tns,
+        ff_aac_search_for_ltp,
         search_for_ms,
         ff_aac_search_for_is,
         ff_aac_search_for_pred,
@@ -945,14 +955,19 @@ AACCoefficientsEncoder ff_aac_coders[AAC_CODER_NB] = {
         codebook_trellis_rate,
         quantize_and_encode_band,
         ff_aac_encode_tns_info,
+        ff_aac_encode_ltp_info,
         ff_aac_encode_main_pred,
-        ff_aac_adjust_common_prediction,
+        ff_aac_adjust_common_pred,
+        ff_aac_adjust_common_ltp,
         ff_aac_apply_main_pred,
         ff_aac_apply_tns,
+        ff_aac_update_ltp,
+        ff_aac_ltp_insert_new_frame,
         set_special_band_scalefactors,
         search_for_pns,
         mark_pns,
         ff_aac_search_for_tns,
+        ff_aac_search_for_ltp,
         search_for_ms,
         ff_aac_search_for_is,
         ff_aac_search_for_pred,
@@ -962,14 +977,19 @@ AACCoefficientsEncoder ff_aac_coders[AAC_CODER_NB] = {
         encode_window_bands_info,
         quantize_and_encode_band,
         ff_aac_encode_tns_info,
+        ff_aac_encode_ltp_info,
         ff_aac_encode_main_pred,
-        ff_aac_adjust_common_prediction,
+        ff_aac_adjust_common_pred,
+        ff_aac_adjust_common_ltp,
         ff_aac_apply_main_pred,
         ff_aac_apply_tns,
+        ff_aac_update_ltp,
+        ff_aac_ltp_insert_new_frame,
         set_special_band_scalefactors,
         search_for_pns,
         mark_pns,
         ff_aac_search_for_tns,
+        ff_aac_search_for_ltp,
         search_for_ms,
         ff_aac_search_for_is,
         ff_aac_search_for_pred,

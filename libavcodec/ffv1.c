@@ -66,28 +66,33 @@ av_cold int ff_ffv1_common_init(AVCodecContext *avctx)
 
 av_cold int ff_ffv1_init_slice_state(FFV1Context *f, FFV1Context *fs)
 {
-    int j;
+    int j, i;
 
     fs->plane_count  = f->plane_count;
     fs->transparency = f->transparency;
     for (j = 0; j < f->plane_count; j++) {
         PlaneContext *const p = &fs->plane[j];
 
-        if (fs->ac) {
+        if (fs->ac != AC_GOLOMB_RICE) {
             if (!p->state)
                 p->state = av_malloc_array(p->context_count, CONTEXT_SIZE *
                                      sizeof(uint8_t));
             if (!p->state)
                 return AVERROR(ENOMEM);
         } else {
-            if (!p->vlc_state)
-                p->vlc_state = av_malloc_array(p->context_count, sizeof(VlcState));
-            if (!p->vlc_state)
-                return AVERROR(ENOMEM);
+            if (!p->vlc_state) {
+                p->vlc_state = av_mallocz_array(p->context_count, sizeof(VlcState));
+                if (!p->vlc_state)
+                    return AVERROR(ENOMEM);
+                for (i = 0; i < p->context_count; i++) {
+                    p->vlc_state[i].error_sum = 4;
+                    p->vlc_state[i].count     = 1;
+                }
+            }
         }
     }
 
-    if (fs->ac > 1) {
+    if (fs->ac == AC_RANGE_CUSTOM_TAB) {
         //FIXME only redo if state_transition changed
         for (j = 1; j < 256; j++) {
             fs->c. one_state[      j] = f->state_transition[j];
@@ -179,7 +184,7 @@ void ff_ffv1_clear_slice_state(FFV1Context *f, FFV1Context *fs)
         p->interlace_bit_state[0] = 128;
         p->interlace_bit_state[1] = 128;
 
-        if (fs->ac) {
+        if (fs->ac != AC_GOLOMB_RICE) {
             if (f->initial_states[p->quant_table_index]) {
                 memcpy(p->state, f->initial_states[p->quant_table_index],
                        CONTEXT_SIZE * p->context_count);

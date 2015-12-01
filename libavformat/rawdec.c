@@ -45,7 +45,7 @@ int ff_raw_read_partial_packet(AVFormatContext *s, AVPacket *pkt)
     pkt->stream_index = 0;
     ret = ffio_read_partial(s->pb, pkt->data, size);
     if (ret < 0) {
-        av_free_packet(pkt);
+        av_packet_unref(pkt);
         return ret;
     }
     av_shrink_packet(pkt, ret);
@@ -123,19 +123,6 @@ AVInputFormat ff_data_demuxer = {
 };
 #endif
 
-#if CONFIG_LATM_DEMUXER
-
-AVInputFormat ff_latm_demuxer = {
-    .name           = "latm",
-    .long_name      = NULL_IF_CONFIG_SMALL("raw LOAS/LATM"),
-    .read_header    = ff_raw_audio_read_header,
-    .read_packet    = ff_raw_read_partial_packet,
-    .flags          = AVFMT_GENERIC_INDEX | AVFMT_NOTIMESTAMPS,
-    .extensions     = "latm",
-    .raw_codec_id   = AV_CODEC_ID_AAC_LATM,
-};
-#endif
-
 #if CONFIG_MJPEG_DEMUXER
 static int mjpeg_probe(AVProbeData *p)
 {
@@ -204,8 +191,4 @@ static int mjpeg_probe(AVProbeData *p)
 }
 
 FF_DEF_RAWVIDEO_DEMUXER2(mjpeg, "raw MJPEG video", mjpeg_probe, "mjpg,mjpeg,mpo", AV_CODEC_ID_MJPEG, AVFMT_GENERIC_INDEX|AVFMT_NOTIMESTAMPS)
-#endif
-
-#if CONFIG_VC1_DEMUXER
-FF_DEF_RAWVIDEO_DEMUXER2(vc1, "raw VC-1", NULL, "vc1", AV_CODEC_ID_VC1, AVFMT_GENERIC_INDEX|AVFMT_NOTIMESTAMPS)
 #endif

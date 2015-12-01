@@ -49,7 +49,10 @@ static int ffm_is_avail_data(AVFormatContext *s, int size)
     } else {
     if (pos == ffm->write_index) {
         /* exactly at the end of stream */
-        return AVERROR(EAGAIN);
+        if (ffm->server_attached)
+            return AVERROR(EAGAIN);
+        else
+            return AVERROR_INVALIDDATA;
     } else if (pos < ffm->write_index) {
         avail_size = ffm->write_index - pos;
     } else {
@@ -59,8 +62,10 @@ static int ffm_is_avail_data(AVFormatContext *s, int size)
     avail_size = (avail_size / ffm->packet_size) * (ffm->packet_size - FFM_HEADER_SIZE) + len;
     if (size <= avail_size)
         return 1;
-    else
+    else if (ffm->server_attached)
         return AVERROR(EAGAIN);
+    else
+        return AVERROR_INVALIDDATA;
 }
 
 static int ffm_resync(AVFormatContext *s, int state)
@@ -632,7 +637,7 @@ static int ffm_read_packet(AVFormatContext *s, AVPacket *pkt)
         pkt->stream_index = ffm->header[0];
         if ((unsigned)pkt->stream_index >= s->nb_streams) {
             av_log(s, AV_LOG_ERROR, "invalid stream index %d\n", pkt->stream_index);
-            av_free_packet(pkt);
+            av_packet_unref(pkt);
             ffm->read_state = READ_HEADER;
             return -1;
         }
@@ -643,7 +648,7 @@ static int ffm_read_packet(AVFormatContext *s, AVPacket *pkt)
         ffm->read_state = READ_HEADER;
         if (ffm_read_data(s, pkt->data, size, 0) != size) {
             /* bad case: desynchronized packet. we cancel all the packet loading */
-            av_free_packet(pkt);
+            av_packet_unref(pkt);
             return -1;
         }
         pkt->pts = AV_RB64(ffm->header+8);
@@ -731,6 +736,19 @@ static int ffm_probe(AVProbeData *p)
     return 0;
 }
 
+static const AVOption options[] = {
+    {"server_attached", NULL, offsetof(FFMContext, server_attached), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, AV_OPT_FLAG_EXPORT },
+    {"ffm_write_index", NULL, offsetof(FFMContext, write_index), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, 1, AV_OPT_FLAG_EXPORT },
+    {"ffm_file_size", NULL, offsetof(FFMContext, file_size), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, 1, AV_OPT_FLAG_EXPORT },
+    { NULL },
+};
+
+static const AVClass ffm_class = {
+    .class_name = "ffm demuxer",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
 AVInputFormat ff_ffm_demuxer = {
     .name           = "ffm",
     .long_name      = NULL_IF_CONFIG_SMALL("FFM (FFserver live feed)"),
@@ -740,4 +758,5 @@ AVInputFormat ff_ffm_demuxer = {
     .read_packet    = ffm_read_packet,
     .read_close     = ffm_close,
     .read_seek      = ffm_seek,
+    .priv_class     = &ffm_class,
 };

@@ -128,28 +128,25 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_RGBA, AV_PIX_FMT_NONE };
+    int ret;
 
     /* set input audio formats */
     formats = ff_make_format_list(sample_fmts);
-    if (!formats)
-        return AVERROR(ENOMEM);
-    ff_formats_ref(formats, &inlink->out_formats);
+    if ((ret = ff_formats_ref(formats, &inlink->out_formats)) < 0)
+        return ret;
 
     layouts = ff_all_channel_layouts();
-    if (!layouts)
-        return AVERROR(ENOMEM);
-    ff_channel_layouts_ref(layouts, &inlink->out_channel_layouts);
+    if ((ret = ff_channel_layouts_ref(layouts, &inlink->out_channel_layouts)) < 0)
+        return ret;
 
     formats = ff_all_samplerates();
-    if (!formats)
-        return AVERROR(ENOMEM);
-    ff_formats_ref(formats, &inlink->out_samplerates);
+    if ((ret = ff_formats_ref(formats, &inlink->out_samplerates)) < 0)
+        return ret;
 
     /* set output video format */
     formats = ff_make_format_list(pix_fmts);
-    if (!formats)
-        return AVERROR(ENOMEM);
-    ff_formats_ref(formats, &outlink->in_formats);
+    if ((ret = ff_formats_ref(formats, &outlink->in_formats)) < 0)
+        return ret;
 
     return 0;
 }
@@ -166,7 +163,7 @@ static void generate_window_func(float *lut, int N, int win_func, float *overlap
         break;
     case WFUNC_BARTLETT:
         for (n = 0; n < N; n++)
-            lut[n] = 1.-FFABS((n-(N-1)/2.)/((N-1)/2.));
+            lut[n] = 1.-fabs((n-(N-1)/2.)/((N-1)/2.));
         *overlap = 0.5;
         break;
     case WFUNC_HANNING:
@@ -210,7 +207,7 @@ static void generate_window_func(float *lut, int N, int win_func, float *overlap
         break;
     case WFUNC_BHANN:
         for (n = 0; n < N; n++)
-            lut[n] = 0.62-0.48*FFABS(n/(double)(N-1)-.5)-0.38*cos(2*M_PI*n/(N-1));
+            lut[n] = 0.62-0.48*fabs(n/(double)(N-1)-.5)-0.38*cos(2*M_PI*n/(N-1));
         *overlap = 0.5;
         break;
     case WFUNC_SINE:

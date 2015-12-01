@@ -53,16 +53,16 @@ decl_mc_funcs(16, ssse3, int8_t, 32, 8);
 decl_mc_funcs(32, avx2, int8_t, 32, 8);
 #endif
 
-mc_rep_funcs(16,  8,  8,  sse2, int16_t,  8, 8);
+mc_rep_funcs(16,  8,  8,  sse2, int16_t,  8, 8)
 #if ARCH_X86_32
-mc_rep_funcs(16,  8,  8, ssse3, int8_t,  32, 8);
+mc_rep_funcs(16,  8,  8, ssse3, int8_t,  32, 8)
 #endif
-mc_rep_funcs(32, 16, 16, sse2,  int16_t,  8, 8);
-mc_rep_funcs(32, 16, 16, ssse3, int8_t,  32, 8);
-mc_rep_funcs(64, 32, 32, sse2,  int16_t,  8, 8);
-mc_rep_funcs(64, 32, 32, ssse3, int8_t,  32, 8);
+mc_rep_funcs(32, 16, 16, sse2,  int16_t,  8, 8)
+mc_rep_funcs(32, 16, 16, ssse3, int8_t,  32, 8)
+mc_rep_funcs(64, 32, 32, sse2,  int16_t,  8, 8)
+mc_rep_funcs(64, 32, 32, ssse3, int8_t,  32, 8)
 #if ARCH_X86_64 && HAVE_AVX2_EXTERNAL
-mc_rep_funcs(64, 32, 32, avx2,  int8_t,  32, 8);
+mc_rep_funcs(64, 32, 32, avx2,  int8_t,  32, 8)
 #endif
 
 extern const int8_t ff_filters_ssse3[3][15][4][32];
@@ -216,10 +216,10 @@ av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp, int bpp, int bitexact)
     int cpu_flags;
 
     if (bpp == 10) {
-        ff_vp9dsp_init_10bpp_x86(dsp);
+        ff_vp9dsp_init_10bpp_x86(dsp, bitexact);
         return;
     } else if (bpp == 12) {
-        ff_vp9dsp_init_12bpp_x86(dsp);
+        ff_vp9dsp_init_12bpp_x86(dsp, bitexact);
         return;
     }
 

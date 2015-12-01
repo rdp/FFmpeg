@@ -171,9 +171,9 @@ static int alloc_scratch_buffers(H264SliceContext *sl, int linesize)
     // (= 21x21 for  h264)
     av_fast_malloc(&sl->edge_emu_buffer, &sl->edge_emu_buffer_allocated, alloc_size * 2 * 21);
 
-    av_fast_malloc(&sl->top_borders[0], &sl->top_borders_allocated[0],
+    av_fast_mallocz(&sl->top_borders[0], &sl->top_borders_allocated[0],
                    h->mb_width * 16 * 3 * sizeof(uint8_t) * 2);
-    av_fast_malloc(&sl->top_borders[1], &sl->top_borders_allocated[1],
+    av_fast_mallocz(&sl->top_borders[1], &sl->top_borders_allocated[1],
                    h->mb_width * 16 * 3 * sizeof(uint8_t) * 2);
 
     if (!sl->bipred_scratchpad || !sl->edge_emu_buffer ||
@@ -617,7 +617,7 @@ static int h264_frame_start(H264Context *h)
        && !(h->avctx->codec->capabilities & AV_CODEC_CAP_HWACCEL_VDPAU)
 #endif
        )
-        avpriv_color_frame(pic->f, c);
+        ff_color_frame(pic->f, c);
 
     h->cur_pic_ptr = pic;
     ff_h264_unref_picture(h, &h->cur_pic);
@@ -1097,6 +1097,7 @@ static int h264_slice_header_init(H264Context *h)
         nb_slices = max_slices;
     }
     h->slice_context_count = nb_slices;
+    h->max_contexts = FFMIN(h->max_contexts, nb_slices);
 
     if (!HAVE_THREADS || !(h->avctx->active_thread_type & FF_THREAD_SLICE)) {
         ret = ff_h264_slice_context_init(h, &h->slice_ctx[0]);
@@ -1177,6 +1178,15 @@ int ff_h264_decode_slice_header(H264Context *h, H264SliceContext *sl)
                 av_log(h->avctx, AV_LOG_ERROR, "Too many fields\n");
                 return AVERROR_INVALIDDATA;
             }
+            if (h->max_contexts > 1) {
+                if (!h->single_decode_warning) {
+                    av_log(h->avctx, AV_LOG_WARNING, "Cannot decode multiple access units as slice threads\n");
+                    h->single_decode_warning = 1;
+                }
+                h->max_contexts = 1;
+                return SLICE_SINGLETHREAD;
+            }
+
             if (h->cur_pic_ptr && FIELD_PICTURE(h) && h->first_field) {
                 ret = ff_h264_field_end(h, h->slice_ctx, 1);
                 h->current_slice = 0;
@@ -2362,9 +2372,11 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
         align_get_bits(&sl->gb);
 
         /* init cabac */
-        ff_init_cabac_decoder(&sl->cabac,
+        ret = ff_init_cabac_decoder(&sl->cabac,
                               sl->gb.buffer + get_bits_count(&sl->gb) / 8,
                               (get_bits_left(&sl->gb) + 7) / 8);
+        if (ret < 0)
+            return ret;
 
         ff_h264_init_cabac_states(h, sl);
 

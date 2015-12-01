@@ -1145,6 +1145,15 @@ static const MXFCodecUL mxf_intra_only_picture_essence_coding_uls[] = {
     { { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 },  0,       AV_CODEC_ID_NONE },
 };
 
+/* actual coded width for AVC-Intra to allow selecting correct SPS/PPS */
+static const MXFCodecUL mxf_intra_only_picture_coded_width[] = {
+    { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x0A,0x04,0x01,0x02,0x02,0x01,0x32,0x21,0x01 }, 16, 1440 },
+    { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x0A,0x04,0x01,0x02,0x02,0x01,0x32,0x21,0x02 }, 16, 1440 },
+    { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x0A,0x04,0x01,0x02,0x02,0x01,0x32,0x21,0x03 }, 16, 1440 },
+    { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x0A,0x04,0x01,0x02,0x02,0x01,0x32,0x21,0x04 }, 16, 1440 },
+    { { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 },  0,    0 },
+};
+
 static const MXFCodecUL mxf_sound_essence_container_uls[] = {
     // sound essence container uls
     { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x01,0x0d,0x01,0x03,0x01,0x02,0x06,0x01,0x00 }, 14, AV_CODEC_ID_PCM_S16LE }, /* BWF Frame wrapped */
@@ -1776,6 +1785,16 @@ static int mxf_parse_physical_source_package(MXFContext *mxf, MXFTrack *source_t
                 continue;
             }
 
+        if (physical_track->edit_rate.num <= 0 ||
+            physical_track->edit_rate.den <= 0) {
+            av_log(mxf->fc, AV_LOG_WARNING,
+                   "Invalid edit rate (%d/%d) found on structural"
+                   " component #%d, defaulting to 25/1\n",
+                   physical_track->edit_rate.num,
+                   physical_track->edit_rate.den, i);
+            physical_track->edit_rate = (AVRational){25, 1};
+        }
+
             for (k = 0; k < physical_track->sequence->structural_components_count; k++) {
                 if (!(mxf_tc = mxf_resolve_timecode_component(mxf, &physical_track->sequence->structural_components_refs[k])))
                     continue;
@@ -2118,6 +2137,10 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
                 memcpy(st->codec->extradata, descriptor->extradata, descriptor->extradata_size);
             }
         } else if (st->codec->codec_id == AV_CODEC_ID_H264) {
+            int coded_width = mxf_get_codec_ul(mxf_intra_only_picture_coded_width,
+                                               &descriptor->essence_codec_ul)->id;
+            if (coded_width)
+                st->codec->width = coded_width;
             ret = ff_generate_avci_extradata(st);
             if (ret < 0)
                 return ret;
@@ -2765,13 +2788,13 @@ static int mxf_read_header(AVFormatContext *s)
                 if ((ret = mxf_parse_klv(mxf, klv, metadata->read, metadata->ctx_size, metadata->type)) < 0)
                     goto fail;
                 break;
-            } else {
-                av_log(s, AV_LOG_VERBOSE, "Dark key " PRIxUID "\n",
-                       UID_ARG(klv.key));
             }
         }
-        if (!metadata->read)
+        if (!metadata->read) {
+            av_log(s, AV_LOG_VERBOSE, "Dark key " PRIxUID "\n",
+                            UID_ARG(klv.key));
             avio_skip(s->pb, klv.length);
+        }
     }
     /* FIXME avoid seek */
     if (!essence_offset)  {
@@ -2957,7 +2980,7 @@ static int mxf_read_packet_old(AVFormatContext *s, AVPacket *pkt)
                 /* if this check is hit then it's possible OPAtom was treated as OP1a
                  * truncate the packet since it's probably very large (>2 GiB is common) */
                 avpriv_request_sample(s,
-                                      "OPAtom misinterpreted as OP1a?"
+                                      "OPAtom misinterpreted as OP1a? "
                                       "KLV for edit unit %i extending into "
                                       "next edit unit",
                                       mxf->current_edit_unit);

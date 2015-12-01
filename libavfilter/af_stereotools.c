@@ -92,16 +92,15 @@ static int query_formats(AVFilterContext *ctx)
 {
     AVFilterFormats *formats = NULL;
     AVFilterChannelLayouts *layout = NULL;
+    int ret;
 
-    ff_add_format(&formats, AV_SAMPLE_FMT_DBL);
-    ff_set_common_formats(ctx, formats);
-    ff_add_channel_layout(&layout, AV_CH_LAYOUT_STEREO);
-    ff_set_common_channel_layouts(ctx, layout);
+    if ((ret = ff_add_format                 (&formats, AV_SAMPLE_FMT_DBL  )) < 0 ||
+        (ret = ff_set_common_formats         (ctx     , formats            )) < 0 ||
+        (ret = ff_add_channel_layout         (&layout , AV_CH_LAYOUT_STEREO)) < 0 ||
+        (ret = ff_set_common_channel_layouts (ctx     , layout             )) < 0)
+        return ret;
 
     formats = ff_all_samplerates();
-    if (!formats)
-        return AVERROR(ENOMEM);
-
     return ff_set_common_samplerates(ctx, formats);
 }
 
@@ -147,7 +146,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     double *buffer = s->buffer;
     AVFrame *out;
     double *dst;
-    int nbuf = inlink->sample_rate * (FFABS(delay) / 1000.);
+    int nbuf = inlink->sample_rate * (fabs(delay) / 1000.);
     int n;
 
     nbuf -= nbuf % 2;

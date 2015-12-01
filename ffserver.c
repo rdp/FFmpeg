@@ -300,20 +300,24 @@ bail_eio:
 static void ffm_set_write_index(AVFormatContext *s, int64_t pos,
                                 int64_t file_size)
 {
-    FFMContext *ffm = s->priv_data;
-    ffm->write_index = pos;
-    ffm->file_size = file_size;
+    av_opt_set_int(s, "server_attached", 1, AV_OPT_SEARCH_CHILDREN);
+    av_opt_set_int(s, "write_index", pos, AV_OPT_SEARCH_CHILDREN);
+    av_opt_set_int(s, "file_size", file_size, AV_OPT_SEARCH_CHILDREN);
 }
 
-static char *ctime1(char *buf2, int buf_size)
+static char *ctime1(char *buf2, size_t buf_size)
 {
     time_t ti;
     char *p;
 
     ti = time(NULL);
     p = ctime(&ti);
+    if (!p || !*p) {
+        *buf2 = '\0';
+        return buf2;
+    }
     av_strlcpy(buf2, p, buf_size);
-    p = buf2 + strlen(p) - 1;
+    p = buf2 + strlen(buf2) - 1;
     if (*p == '\n')
         *p = '\0';
     return buf2;
@@ -2272,7 +2276,7 @@ static int http_prepare_data(HTTPContext *c)
             } else {
                 int source_index = pkt.stream_index;
                 /* update first pts if needed */
-                if (c->first_pts == AV_NOPTS_VALUE) {
+                if (c->first_pts == AV_NOPTS_VALUE && pkt.dts != AV_NOPTS_VALUE) {
                     c->first_pts = av_rescale_q(pkt.dts, c->fmt_in->streams[pkt.stream_index]->time_base, AV_TIME_BASE_Q);
                     c->start_time = cur_time;
                 }
@@ -2311,14 +2315,16 @@ static int http_prepare_data(HTTPContext *c)
                      * XXX: need more abstract handling */
                     if (c->is_packetized) {
                         /* compute send time and duration */
-                        c->cur_pts = av_rescale_q(pkt.dts, ist->time_base, AV_TIME_BASE_Q);
-                        c->cur_pts -= c->first_pts;
+                        if (pkt.dts != AV_NOPTS_VALUE) {
+                            c->cur_pts = av_rescale_q(pkt.dts, ist->time_base, AV_TIME_BASE_Q);
+                            c->cur_pts -= c->first_pts;
+                        }
                         c->cur_frame_duration = av_rescale_q(pkt.duration, ist->time_base, AV_TIME_BASE_Q);
                         /* find RTP context */
                         c->packet_stream_index = pkt.stream_index;
                         ctx = c->rtp_ctx[c->packet_stream_index];
                         if(!ctx) {
-                            av_free_packet(&pkt);
+                            av_packet_unref(&pkt);
                             break;
                         }
                         codec = ctx->streams[0]->codec;
@@ -2364,17 +2370,18 @@ static int http_prepare_data(HTTPContext *c)
 
                     av_freep(&c->pb_buffer);
                     len = avio_close_dyn_buf(ctx->pb, &c->pb_buffer);
+                    ctx->pb = NULL;
                     c->cur_frame_bytes = len;
                     c->buffer_ptr = c->pb_buffer;
                     c->buffer_end = c->pb_buffer + len;
 
                     codec->frame_number++;
                     if (len == 0) {
-                        av_free_packet(&pkt);
+                        av_packet_unref(&pkt);
                         goto redo;
                     }
                 }
-                av_free_packet(&pkt);
+                av_packet_unref(&pkt);
             }
         }
         break;
@@ -2831,7 +2838,7 @@ static int rtsp_parse_request(HTTPContext *c)
             len = sizeof(line) - 1;
         memcpy(line, p, len);
         line[len] = '\0';
-        ff_rtsp_parse_line(header, line, NULL, NULL);
+        ff_rtsp_parse_line(NULL, header, line, NULL, NULL);
         p = p1 + 1;
     }
 
@@ -3325,6 +3332,7 @@ static int rtp_new_av_stream(HTTPContext *c,
     URLContext *h = NULL;
     uint8_t *dummy_buf;
     int max_packet_size;
+    void *st_internal;
 
     /* now we can open the relevant output stream */
     ctx = avformat_alloc_context();
@@ -3332,14 +3340,13 @@ static int rtp_new_av_stream(HTTPContext *c,
         return -1;
     ctx->oformat = av_guess_format("rtp", NULL, NULL);
 
-    st = av_mallocz(sizeof(AVStream));
+    st = avformat_new_stream(ctx, NULL);
     if (!st)
         goto fail;
-    ctx->nb_streams = 1;
-    ctx->streams = av_mallocz_array(ctx->nb_streams, sizeof(AVStream *));
-    if (!ctx->streams)
-      goto fail;
-    ctx->streams[0] = st;
+
+    av_freep(&st->codec);
+    av_freep(&st->info);
+    st_internal = st->internal;
 
     if (!c->stream->feed ||
         c->stream->feed == c->stream)
@@ -3349,6 +3356,7 @@ static int rtp_new_av_stream(HTTPContext *c,
                c->stream->feed->streams[c->stream->feed_streams[stream_index]],
                sizeof(AVStream));
     st->priv_data = NULL;
+    st->internal = st_internal;
 
     /* build destination RTP address */
     ipaddr = inet_ntoa(dest_addr->sin_addr);
@@ -3405,6 +3413,7 @@ static int rtp_new_av_stream(HTTPContext *c,
         return -1;
     }
     avio_close_dyn_buf(ctx->pb, &dummy_buf);
+    ctx->pb = NULL;
     av_free(dummy_buf);
 
     c->rtp_ctx[stream_index] = ctx;
@@ -3548,7 +3557,7 @@ static void extract_mpeg4_header(AVFormatContext *infile)
             }
             mpeg4_count--;
         }
-        av_free_packet(&pkt);
+        av_packet_unref(&pkt);
     }
 }
 
