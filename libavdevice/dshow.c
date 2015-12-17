@@ -679,11 +679,11 @@ end:
 }
 
 /* dshow_connect_bda_pins connects [source] filter's output pin named [src_pin_name] to [destination] filter's input pin named [dest_pin_name]
- * and provides the [destination] filter's output pin named [ext_pin_name] to a pin ptr [ext_pin]
- * pin names and ext_pin can be NULL if not needed/doesn't care
+ * and provides the [destination] filter's output pin named [lookup_pin_name] to a pin ptr [lookup_pin]
+ * pin names and lookup_pin can be NULL if not needed/doesn't care
 */
 static int
-dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *src_pin_name, IBaseFilter *destination, const char *dest_pin_name, IPin **ext_pin, const char *ext_pin_name )
+dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *src_pin_name, IBaseFilter *destination, const char *dest_pin_name, IPin **lookup_pin, const char *lookup_pin_name )
 {
     struct dshow_ctx *ctx = avctx->priv_data;
     IEnumPins *pins = 0;
@@ -701,7 +701,7 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
         av_log(avctx, AV_LOG_ERROR, "Missing graph component.\n");
         return AVERROR(EIO);
     }
-    av_log(avctx, AV_LOG_INFO, "searching for %s -> %s %s", src_pin_name, dest_pin_name, ext_pin_name);
+    av_log(avctx, AV_LOG_INFO, "searching for %s -> %s (and also lookup pin %s)", src_pin_name, dest_pin_name, lookup_pin_name);
 
     ///enumerate source filter's pins
     r = IBaseFilter_EnumPins(source, &pins);
@@ -783,8 +783,8 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
     }
     // TODO I think this doesn't disconnect on failure...
 
-    ///find output pin
-    if (ext_pin != NULL) {
+    ///find lookup pin
+    if (lookup_pin != NULL) {
         ///enumerate destination filter's pins
         r = IBaseFilter_EnumPins(destination, &pins);
         if (r != S_OK) {
@@ -793,7 +793,7 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
         }
 
         ///find destination's output pin
-        while (!(*ext_pin) && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
+        while (!(*lookup_pin) && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
             char *name_buf;
             PIN_INFO info = {0};
 
@@ -803,16 +803,16 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
             av_log(avctx, AV_LOG_INFO, "Ext filter pin [%s] dir %d wanted dir %d\n", name_buf, info.dir, PINDIR_OUTPUT);
 
             if (info.dir == PINDIR_OUTPUT)
-                if ( (ext_pin_name==NULL) ||                                             //if output name empty
-                        ((ext_pin_name) && !(strcmp(name_buf,ext_pin_name))) )     //or output name not empty and equal to the current pin
-                *ext_pin = pin;
+                if ( (lookup_pin_name==NULL) ||                                             //if output name empty
+                        ((lookup_pin_name) && !(strcmp(name_buf,lookup_pin_name))) )     //or output name not empty and equal to the current pin
+                *lookup_pin = pin;
         }
 
         IEnumPins_Release(pins);
 
-        if (!(*ext_pin)) {
-            if (ext_pin_name)
-                av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have output (ext) pin named \"%s\".\n", ext_pin_name);
+        if (!(*lookup_pin)) {
+            if (lookup_pin_name)
+                av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have output (ext) pin named \"%s\".\n", lookup_pin_name);
             else
                 av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have output (ext) pin.\n");
             return AVERROR(EIO);
@@ -1364,7 +1364,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         IATSCLocator *atsc_locator = NULL;
         GUID CLSIDNetworkType = GUID_NULL;
         GUID tuning_space_network_type = GUID_NULL;
-        IPin *bda_src_pin = NULL;
+        IPin *bda_video_out_of_mpeg_demuxer_ping = NULL;
         ICaptureGraphBuilder2 *graph_builder2 = NULL;
 
 
@@ -1655,7 +1655,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_src_pin, "3"); // TODO fix me! 003 also
+        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_video_out_of_mpeg_demuxer_ping, "3"); // TODO fix me! 003 also
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux! .\n");
             goto error;
@@ -1965,7 +1965,7 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         av_log(avctx, AV_LOG_INFO, "Video capture filter added to graph\n");
 
-        if(!bda_src_pin) {
+        if(!bda_video_out_of_mpeg_demuxer_ping) {
             av_log(avctx, AV_LOG_ERROR, "No output from bda source\n");
             goto error;
         }
@@ -1983,9 +1983,9 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_src_pin, NULL /* no intermediate filter */,
+        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_video_out_of_mpeg_demuxer_ping, NULL /* no intermediate filter */,
             (IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
-       // this in essence just connected bda_src_pin with capture_filter->capture_pin 
+       // this in essence just connected bda_video_out_of_mpeg_demuxer_ping with capture_filter->capture_pin 
 
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not RenderStream to connect pins\n");
