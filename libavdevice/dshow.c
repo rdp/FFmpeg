@@ -1633,7 +1633,7 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "3"); // TODO fix me!
         if (r != S_OK) {
-            r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "003"); // this doesn't work!
+            r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "003"); // this doesn't work! and 001
             if (r != S_OK) {
                 av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux, tried twice! .\n");
                 goto error;
