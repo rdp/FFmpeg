@@ -1166,14 +1166,10 @@ dshow_add_device(AVFormatContext *avctx,
             VIDEOINFOHEADER2 *v = (void *) type.pbFormat;
             time_base = (AVRational) { v->AvgTimePerFrame, 10000000 };
             bih = &v->bmiHeader;
-        } else if (IsEqualGUID(&type.subtype, &KSDATAFORMAT_SUBTYPE_BDA_MPEG2_TRANSPORT_LOCAL)) {
-            avpriv_set_pts_info(st, 60, 1, 27000000);
-         codec->codec_id = AV_CODEC_ID_MPEG2TS;
-          codec->codec_type = AVMEDIA_TYPE_DATA;
-          goto done;
-        } 
+        }
         if (!bih) {
             av_log(avctx, AV_LOG_ERROR, "Could not get media type.\n");
+            ff_printGUID(&type.formattype);
             goto error;
         }
 
@@ -1314,7 +1310,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         IATSCLocator *atsc_locator = NULL;
         GUID CLSIDNetworkType = GUID_NULL;
         GUID tuning_space_network_type = GUID_NULL;
-        IPin *bda_mpeg_raw_stream_pin = NULL;
+        IPin *bda_mpeg_video_pin = NULL;
         ICaptureGraphBuilder2 *graph_builder2 = NULL;
 
 
@@ -1603,16 +1599,15 @@ static int dshow_read_header(AVFormatContext *avctx)
             av_log(avctx, AV_LOG_ERROR, "Could not add BDA mpeg2 demux to graph.\n");
             goto error;
         }
-        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, NULL, NULL); // TODO fix me! 003 also '3"
-//        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_mpeg_raw_stream_pin, "3"); // TODO fix me! 003 also
+//        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, NULL, NULL); // TODO fix me! 003 also '3"
+        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_mpeg_video_pin, "3"); // TODO fix me! 003 also
 
 
         // after this point the infinite tee will now have an "Output2" named pin
-        av_log(avctx, AV_LOG_ERROR, "starting badish\n");
-        r = dshow_lookup_pin(avctx, bda_infinite_tee, PINDIR_OUTPUT, &bda_mpeg_raw_stream_pin, "Output2", "split mpeg tee pin");
-        if (r != S_OK) {
-            goto error;
-        }
+        //r = dshow_lookup_pin(avctx, bda_infinite_tee, PINDIR_OUTPUT, &bda_mpeg_video_pin, "Output2", "split mpeg tee pin");
+        //if (r != S_OK) {
+        //    goto error;
+       // }
 
         //add DBA MPEG2 Transport information filter
 
@@ -1931,9 +1926,9 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_mpeg_raw_stream_pin, NULL /* no intermediate filter */,
+        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_mpeg_video_pin, NULL /* no intermediate filter */,
             (IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
-       // this in essence just connected bda_mpeg_raw_stream_pin with capture_filter->capture_pin no real need for RenderStream
+       // this in essence just connected bda_mpeg_video_pin with capture_filter->capture_pin no real need for RenderStream
 
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not RenderStream to connect pins\n");
