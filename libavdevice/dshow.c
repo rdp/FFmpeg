@@ -701,7 +701,7 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
         av_log(avctx, AV_LOG_ERROR, "Missing graph component.\n");
         return AVERROR(EIO);
     }
-    av_log(avctx, AV_LOG_INFO, "searching for %s -> %s", src_pin_name, dest_pin_name);
+    av_log(avctx, AV_LOG_INFO, "searching for %s -> %s %s", src_pin_name, dest_pin_name, ext_pin_name);
 
     ///enumerate source filter's pins
     r = IBaseFilter_EnumPins(source, &pins);
@@ -1631,10 +1631,13 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "003");
+        r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "3"); // TODO fix me!
         if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux .\n");
-            goto error;
+            r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "003"); // this doesn't work!
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux, tried twice! .\n");
+                goto error;
+            }
         }
 
         //add DBA MPEG2 Transport information filter
@@ -1654,7 +1657,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         }
 
 
-        r = dshow_connect_bda_pins(avctx, bda_mpeg2_demux, "001", bda_mpeg2_info, "IB Input", NULL, NULL);
+        r = dshow_connect_bda_pins(avctx, bda_mpeg2_demux, "1", bda_mpeg2_info, "IB Input", NULL, NULL);
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not connect mpeg2 demux to mpeg2 transport information filter.\n");
             goto error;
