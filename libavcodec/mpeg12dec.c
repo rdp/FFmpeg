@@ -2526,7 +2526,7 @@ static int decode_chunks(AVCodecContext *avctx, AVFrame *picture,
             picture_start_code_seen = 1;
 
             if (s2->width <= 0 || s2->height <= 0) {
-                av_log(avctx, AV_LOG_ERROR, "Invalid frame dimensions %dx%d.\n",
+                av_log(avctx, AV_LOG_ERROR, "Invalid frame dimensions %dx%d, or possibly encountered data before first frame.\n",
                        s2->width, s2->height);
                 return AVERROR_INVALIDDATA;
             }

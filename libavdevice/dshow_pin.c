@@ -328,7 +328,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     IMediaSample_GetTime(sample, &orig_curtime, &dummy);
     orig_curtime += pin->filter->start_time;
     IReferenceClock_GetTime(clock, &graphtime);
-    if (devtype == VideoDevice) {
+    if (devtype == VideoDevice && 0) {
         /* PTS from video devices is unreliable. */
         IReferenceClock_GetTime(clock, &curtime);
     } else {
