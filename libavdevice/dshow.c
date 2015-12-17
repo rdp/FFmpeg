@@ -678,6 +678,51 @@ end:
         CoTaskMemFree(ca_guid.pElems);
 }
 
+/* dshow_find_pin given a filter, direction and optional pin name, return a ref to that pin
+ * note this does add a reference to the pin returned...
+*/
+static int
+dshow_lookup_pin(AVFormatContext *avctx, IBaseFilter *filter, PIN_DIRECTION pin_direction, IPin **discovered_pin, const char *lookup_pin_name, const char *filter_descriptive_text) {
+    IEnumPins *pins = 0;
+    IPin *pin = NULL;
+    IPin *local_discovered_pin = NULL; // for easier release checking
+    int r;
+
+    r = IBaseFilter_EnumPins(filter, &pins);
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not enumerate filter %s pins.\n", filter_descriptive_text);
+        return AVERROR(EIO);
+    }
+    while (!local_discovered_pin && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
+        char *name_buf;
+        PIN_INFO info = {0};
+
+        IPin_QueryPinInfo(pin, &info);
+        IBaseFilter_Release(info.pFilter);
+        name_buf = dup_wchar_to_utf8(info.achName);
+        av_log(avctx, AV_LOG_DEBUG, "Filter %s pin [%s] has direction %d wanted direction %d\n", filter_descriptive_text, name_buf, info.dir, pin_direction);
+
+        if (info.dir == pin_direction) 
+            if ( (lookup_pin_name == NULL) ||                                             //if input name empty
+                    ((lookup_pin_name) && !(strcmp(name_buf,lookup_pin_name))) )     //or input name not empty and equal to the current pin
+                  local_discovered_pin = pin;
+        if (!local_discovered_pin)
+          IPin_Release(pin);
+    }
+    IEnumPins_Release(pins);
+
+    if (!local_discovered_pin) {
+        if (lookup_pin_name)
+            av_log(avctx, AV_LOG_ERROR, "Filter %s doesn't have pin with direction %d named \"%s\"\n", filter_descriptive_text, pin_direction, lookup_pin_name);
+        else
+            av_log(avctx, AV_LOG_ERROR, "Filter %s doesn't have pin with direction %d\n", filter_descriptive_text, pin_direction);
+        return AVERROR(EIO);
+    }
+    *discovered_pin = local_discovered_pin;
+    return 0; // success
+
+}
+
 /* dshow_connect_bda_pins connects [source] filter's output pin named [src_pin_name] to [destination] filter's input pin named [dest_pin_name]
  * and provides the [destination] filter's output pin named [lookup_pin_name] to a pin ptr [lookup_pin]
  * pin names and lookup_pin can be NULL if not needed/doesn't care
@@ -686,140 +731,41 @@ static int
 dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *src_pin_name, IBaseFilter *destination, const char *dest_pin_name, IPin **lookup_pin, const char *lookup_pin_name )
 {
     struct dshow_ctx *ctx = avctx->priv_data;
-    IEnumPins *pins = 0;
     IGraphBuilder *graph = NULL;
     IPin *pin_out = NULL;
     IPin *pin_in = NULL;
-    IPin *pin = NULL;
     int r;
-
 
     graph = ctx->graph;
 
-    if ((!graph) || (!source) || (!destination))
+    if (!graph || !source || !destination)
     {
         av_log(avctx, AV_LOG_ERROR, "Missing graph component.\n");
         return AVERROR(EIO);
     }
-    av_log(avctx, AV_LOG_INFO, "searching for %s -> %s (and also lookup pin %s)", src_pin_name, dest_pin_name, lookup_pin_name);
-
-    ///enumerate source filter's pins
-    r = IBaseFilter_EnumPins(source, &pins);
+    r = dshow_lookup_pin(avctx, source, PINDIR_OUTPUT, &pin_out, src_pin_name, "src");
     if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not enumerate src filter's pins.\n");
         return AVERROR(EIO);
     }
-
-    ///find source's output pin
-    while (!pin_out && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
-        char *name_buf;
-        PIN_INFO info = {0};
-
-        IPin_QueryPinInfo(pin, &info);
-        IBaseFilter_Release(info.pFilter);
-        name_buf = dup_wchar_to_utf8(info.achName);
-        av_log(avctx, AV_LOG_INFO, "Source filter pin [%s] dir %d wanted dir %d\n", name_buf, info.dir, PINDIR_OUTPUT);
-
-        if (info.dir == PINDIR_OUTPUT)
-            if ( (src_pin_name==NULL) ||                                             //if input name empty
-                    ((src_pin_name) && !(strcmp(name_buf,src_pin_name))) )     //or input name not empty and equal to the current pin
-                pin_out = pin;
-    }
-
-    IEnumPins_Release(pins);
-
-    if (!pin_out) {
-        if (src_pin_name)
-            av_log(avctx, AV_LOG_ERROR, "Source filter doesn't have output pin named \"%s\".\n", src_pin_name);
-        else
-            av_log(avctx, AV_LOG_ERROR, "Source filter doesn't have output pin.\n");
-        return AVERROR(EIO);
-    }
-
-
-    ///enumerate destination filter's pins
-    r = IBaseFilter_EnumPins(destination, &pins);
+    r = dshow_lookup_pin(avctx, destination, PINDIR_INPUT, &pin_in, dest_pin_name, "dest");
     if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not enumerate dest filter's pins.\n");
-        return AVERROR(EIO);
-    }
-
-    ///find destination's input pin
-    while (!pin_in && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
-        char *name_buf;
-        PIN_INFO info = {0};
-
-        IPin_QueryPinInfo(pin, &info);
-        IBaseFilter_Release(info.pFilter);
-        name_buf = dup_wchar_to_utf8(info.achName);
-        av_log(avctx, AV_LOG_INFO, "Dest filter pin [%s] dir %d wanted dir %d\n", name_buf, info.dir, PINDIR_INPUT);
-
-        if (info.dir == PINDIR_INPUT)
-            if ( (dest_pin_name==NULL) ||                                                 //if output name empty
-                    ((dest_pin_name) && !(strcmp(name_buf,dest_pin_name))) )       //or output name not empty and equal to the current pin
-                pin_in = pin;
-
-        if (info.dir == PINDIR_INPUT)
-            pin_in = pin;
-    }
-
-    IEnumPins_Release(pins);
-
-    if (!pin_in) {
-        if (dest_pin_name)
-            av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have input pin named \"%s\".\n", dest_pin_name);
-        else
-            av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have input pin.\n");
         return AVERROR(EIO);
     }
 
     ///connect pins
-
 
     r = IGraphBuilder_Connect(graph, pin_out, pin_in);
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not connect pins.\n");
         return AVERROR(EIO);
     }
-    // TODO I think this doesn't disconnect on failure...
 
-    ///find lookup pin
     if (lookup_pin != NULL) {
-        ///enumerate destination filter's pins
-        r = IBaseFilter_EnumPins(destination, &pins);
+        r = dshow_lookup_pin(avctx, destination, PINDIR_OUTPUT, lookup_pin, lookup_pin_name, "outgoing pin on destination");
         if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not enumerate dest filter's pins.\n");
             return AVERROR(EIO);
         }
-
-        ///find destination's output pin
-        while (!(*lookup_pin) && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
-            char *name_buf;
-            PIN_INFO info = {0};
-
-            IPin_QueryPinInfo(pin, &info);
-            IBaseFilter_Release(info.pFilter);
-            name_buf = dup_wchar_to_utf8(info.achName);
-            av_log(avctx, AV_LOG_INFO, "Ext filter pin [%s] dir %d wanted dir %d\n", name_buf, info.dir, PINDIR_OUTPUT);
-
-            if (info.dir == PINDIR_OUTPUT)
-                if ( (lookup_pin_name==NULL) ||                                             //if output name empty
-                        ((lookup_pin_name) && !(strcmp(name_buf,lookup_pin_name))) )     //or output name not empty and equal to the current pin
-                *lookup_pin = pin;
-        }
-
-        IEnumPins_Release(pins);
-
-        if (!(*lookup_pin)) {
-            if (lookup_pin_name)
-                av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have output (ext) pin named \"%s\".\n", lookup_pin_name);
-            else
-                av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have output (ext) pin.\n");
-            return AVERROR(EIO);
-        }
-
     }
-
 
     return 0;
 }
@@ -1634,7 +1580,6 @@ static int dshow_read_header(AVFormatContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "success infinite tee to graph.\n");
 
 
-
         r = dshow_connect_bda_pins(avctx, bda_filter_supplying_mpeg, NULL, bda_infinite_tee, NULL, NULL, NULL);
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not connect bda supplier to infinite tee.\n");
@@ -1654,13 +1599,15 @@ static int dshow_read_header(AVFormatContext *avctx)
             av_log(avctx, AV_LOG_ERROR, "Could not add BDA mpeg2 demux to graph.\n");
             goto error;
         }
-
         r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_video_out_of_mpeg_demuxer_pin, "3"); // TODO fix me! 003 also
-        if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux! .\n");
+
+        // after this point the infinite tee will now have an "Output2" named pin
+        //av_log(avctx, AV_LOG_ERROR, "starting bad\n");
+        //r = dshow_connect_bda_pins(avctx, NULL, NULL, bda_infinite_tee, NULL, &bda_video_out_of_mpeg_demuxer_pin, "Output2");
+        if (r != S_OK || !bda_video_out_of_mpeg_demuxer_pin) {
+            av_log(avctx, AV_LOG_ERROR, "Could not get right output pin for mpeg tee spliter! .\n");
             goto error;
         }
-
 
         //add DBA MPEG2 Transport information filter
 
@@ -1965,10 +1912,6 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         av_log(avctx, AV_LOG_INFO, "Video capture filter added to graph\n");
 
-        if(!bda_video_out_of_mpeg_demuxer_pin) {
-            av_log(avctx, AV_LOG_ERROR, "No output from bda source\n");
-            goto error;
-        }
 
         r = CoCreateInstance(&CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
                              &IID_ICaptureGraphBuilder2, (void **) &graph_builder2);
