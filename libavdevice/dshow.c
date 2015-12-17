@@ -29,6 +29,28 @@
 #include "libavcodec/raw.h"
 #include "objidl.h"
 #include "shlwapi.h"
+#include "tuner.h"
+#include "bdadefs.h"
+
+
+static const CLSID CLSID_NetworkProvider =
+    {0xB2F3A67C,0x29DA,0x4C78,{0x88,0x31,0x09,0x1E,0xD5,0x09,0xA4,0x75}};
+static const GUID KSCATEGORY_BDA_NETWORK_TUNER =
+    {0x71985f48,0x1ca1,0x11d3,{0x9c,0xc8,0x00,0xc0,0x4f,0x79,0x71,0xe0}};
+static const GUID KSCATEGORY_BDA_RECEIVER_COMPONENT    =
+    {0xFD0A5AF4,0xB41D,0x11d2,{0x9c,0x95,0x00,0xc0,0x4f,0x79,0x71,0xe0}};
+static const GUID KSCATEGORY_BDA_TRANSPORT_INFORMATION =
+    {0xa2e3074f,0x6c3d,0x11d3,{0xb6,0x53,0x00,0xc0,0x4f,0x79,0x49,0x8e}};
+
+
+//const CLSID CLSID_MPEG2Demultiplexer =
+//    {0xAFB6C280,0x2C41,0x11D3,{0x8A,0x60,0x00,0x00,0xF8,0x1E,0x0E,0x4A}};
+static const CLSID CLSID_BDA_MPEG2_Transport_Informatiuon_Filter =
+    {0xFC772AB0,0x0C7F,0x11D3,{0x8F,0xF2,0x00,0xA0,0xC9,0x22,0x4C,0xF4}};
+static const CLSID CLSID_MS_DTV_DVD_Decoder =
+    {0x212690FB,0x83E5,0x4526,{0x8F,0xD7,0x74,0x47,0x8B,0x79,0x39,0xCD}}; //ms dtv decoder
+
+
 
 
 static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
@@ -204,6 +226,114 @@ fail:
  * If pfilter is NULL, list all device names.
  */
 static int
+dshow_cycle_dtv_devices(AVFormatContext *avctx, enum dshowDtvFilterType devtype, ICreateDevEnum *devenum, IBaseFilter **pfilter)
+{
+    struct dshow_ctx *ctx = avctx->priv_data;
+    IBaseFilter *device_filter = NULL;
+    IEnumMoniker *classenum = NULL;
+    IMoniker *m = NULL;
+    const char *device_name = (devtype == NetworkTuner) ? ctx->device_name[VideoDevice] : ctx->receiver_component;
+    int skip = ctx->video_device_number;
+    int r;
+
+    const GUID *device_guid = (devtype == NetworkTuner) ? &KSCATEGORY_BDA_NETWORK_TUNER : &KSCATEGORY_BDA_RECEIVER_COMPONENT;
+    const char *devtypename = "dtv";
+    const char *sourcetypename = (devtype == NetworkTuner) ? "BDA Netwok Tuner" : "BDA Receiver Component";
+
+    r = ICreateDevEnum_CreateClassEnumerator(devenum, device_guid,
+                                             (IEnumMoniker **) &classenum, 0);
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not enumerate %s devices (or none found).\n",
+               devtypename);
+        return AVERROR(EIO);
+    }
+
+    while (!device_filter && IEnumMoniker_Next(classenum, 1, &m, NULL) == S_OK) {
+        IPropertyBag *bag = NULL;
+        char *friendly_name = NULL;
+        char *unique_name = NULL;
+        VARIANT var;
+        IBindCtx *bind_ctx = NULL;
+        LPOLESTR olestr = NULL;
+        LPMALLOC co_malloc = NULL;
+        int i;
+
+        r = CoGetMalloc(1, &co_malloc);
+        if (r = S_OK)
+            goto fail1;
+        r = CreateBindCtx(0, &bind_ctx);
+        if (r != S_OK)
+            goto fail1;
+        /* GetDisplayname works for both video and audio, DevicePath doesn't */
+        r = IMoniker_GetDisplayName(m, bind_ctx, NULL, &olestr);
+        if (r != S_OK)
+            goto fail1;
+        unique_name = dup_wchar_to_utf8(olestr);
+        /* replace ':' with '_' since we use : to delineate between sources */
+        for (i = 0; i < strlen(unique_name); i++) {
+            if (unique_name[i] == ':')
+                unique_name[i] = '_';
+        }
+
+        r = IMoniker_BindToStorage(m, 0, 0, &IID_IPropertyBag, (void *) &bag);
+        if (r != S_OK)
+            goto fail1;
+
+        var.vt = VT_BSTR;
+        r = IPropertyBag_Read(bag, L"FriendlyName", &var, NULL);
+        if (r != S_OK)
+            goto fail1;
+        friendly_name = dup_wchar_to_utf8(var.bstrVal);
+
+        if (pfilter) {
+            if (strcmp(device_name, friendly_name) && strcmp(device_name, unique_name))
+                goto fail1;
+
+            if (!skip--) {
+                r = IMoniker_BindToObject(m, 0, 0, &IID_IBaseFilter, (void *) &device_filter);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Unable to BindToObject for %s\n", device_name);
+                    goto fail1;
+                }
+            }
+        } else {
+            av_log(avctx, AV_LOG_INFO, " \"%s\"\n", friendly_name);
+            av_log(avctx, AV_LOG_INFO, "    Alternative name \"%s\"\n", unique_name);
+        }
+
+fail1:
+        if (olestr && co_malloc)
+            IMalloc_Free(co_malloc, olestr);
+        if (bind_ctx)
+            IBindCtx_Release(bind_ctx);
+        av_free(friendly_name);
+        av_free(unique_name);
+        if (bag)
+            IPropertyBag_Release(bag);
+        IMoniker_Release(m);
+    }
+
+    IEnumMoniker_Release(classenum);
+
+    if (pfilter) {
+        if (!device_filter) {
+            av_log(avctx, AV_LOG_ERROR, "Could not find %s device with name [%s] among source devices of type %s.\n",
+                   devtypename, device_name, sourcetypename);
+            return AVERROR(EIO);
+        }
+        *pfilter = device_filter;
+    }
+
+    return 0;
+}
+
+/**
+ * Cycle through available devices using the device enumerator devenum,
+ * retrieve the device with type specified by devtype and return the
+ * pointer to the object found in *pfilter.
+ * If pfilter is NULL, list all device names.
+ */
+static int
 dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
                     enum dshowDeviceType devtype, enum dshowSourceFilterType sourcetype, IBaseFilter **pfilter)
 {
@@ -341,7 +471,6 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
 #if DSHOWDEBUG
         ff_print_AM_MEDIA_TYPE(type);
 #endif
-
         if (devtype == VideoDevice) {
             VIDEO_STREAM_CONFIG_CAPS *vcaps = caps;
             BITMAPINFOHEADER *bih;
@@ -547,6 +676,151 @@ end:
         IFilterGraph_Release(filter_info.pGraph);
     if (ca_guid.pElems)
         CoTaskMemFree(ca_guid.pElems);
+}
+
+/* dshow_connect_bda_pins connects [source] filter's output pin named [src_pin_name] to [destination] filter's input pin named [dest_pin_name]
+ * and provides the [destination] filter's output pin named [ext_pin_name] to a pin ptr [ext_pin]
+ * pin names and ext_pin can be NULL if not needed/doesn't care
+*/
+static int
+dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *src_pin_name, IBaseFilter *destination, const char *dest_pin_name, IPin **ext_pin, const char *ext_pin_name )
+{
+    struct dshow_ctx *ctx = avctx->priv_data;
+    IEnumPins *pins = 0;
+    IGraphBuilder *graph = NULL;
+    IPin *pin_out = NULL;
+    IPin *pin_in = NULL;
+    IPin *pin = NULL;
+    int r;
+
+
+    graph = ctx->graph;
+
+    if ((!graph) || (!source) || (!destination))
+    {
+        av_log(avctx, AV_LOG_ERROR, "Missing graph component.\n");
+        return AVERROR(EIO);
+    }
+    av_log(avctx, AV_LOG_INFO, "searching for %s -> %s", src_pin_name, dest_pin_name);
+
+    ///enumerate source filter's pins
+    r = IBaseFilter_EnumPins(source, &pins);
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not enumerate src filter's pins.\n");
+        return AVERROR(EIO);
+    }
+
+    ///find source's output pin
+    while (!pin_out && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
+        char *name_buf;
+        PIN_INFO info = {0};
+
+        IPin_QueryPinInfo(pin, &info);
+        IBaseFilter_Release(info.pFilter);
+        name_buf = dup_wchar_to_utf8(info.achName);
+        av_log(avctx, AV_LOG_INFO, "Source filter pin [%s] dir %d wanted dir %d\n", name_buf, info.dir, PINDIR_OUTPUT);
+
+        if (info.dir == PINDIR_OUTPUT)
+            if ( (src_pin_name==NULL) ||                                             //if input name empty
+                    ((src_pin_name) && !(strcmp(name_buf,src_pin_name))) )     //or input name not empty and equal to the current pin
+                pin_out = pin;
+    }
+
+    IEnumPins_Release(pins);
+
+    if (!pin_out) {
+        if (src_pin_name)
+            av_log(avctx, AV_LOG_ERROR, "Source filter doesn't have output pin named \"%s\".\n", src_pin_name);
+        else
+            av_log(avctx, AV_LOG_ERROR, "Source filter doesn't have output pin.\n");
+        return AVERROR(EIO);
+    }
+
+
+    ///enumerate destination filter's pins
+    r = IBaseFilter_EnumPins(destination, &pins);
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not enumerate dest filter's pins.\n");
+        return AVERROR(EIO);
+    }
+
+    ///find destination's input pin
+    while (!pin_in && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
+        char *name_buf;
+        PIN_INFO info = {0};
+
+        IPin_QueryPinInfo(pin, &info);
+        IBaseFilter_Release(info.pFilter);
+        name_buf = dup_wchar_to_utf8(info.achName);
+        av_log(avctx, AV_LOG_INFO, "Dest filter pin [%s] dir %d wanted dir %d\n", name_buf, info.dir, PINDIR_INPUT);
+
+        if (info.dir == PINDIR_INPUT)
+            if ( (dest_pin_name==NULL) ||                                                 //if output name empty
+                    ((dest_pin_name) && !(strcmp(name_buf,dest_pin_name))) )       //or output name not empty and equal to the current pin
+                pin_in = pin;
+
+        if (info.dir == PINDIR_INPUT)
+            pin_in = pin;
+    }
+
+    IEnumPins_Release(pins);
+
+    if (!pin_in) {
+        if (dest_pin_name)
+            av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have input pin named \"%s\".\n", dest_pin_name);
+        else
+            av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have input pin.\n");
+        return AVERROR(EIO);
+    }
+
+    ///connect pins
+
+
+    r = IGraphBuilder_Connect(graph, pin_out, pin_in);
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not connect pins.\n");
+        return AVERROR(EIO);
+    }
+
+    ///find output pin
+    if (ext_pin != NULL) {
+        ///enumerate destination filter's pins
+        r = IBaseFilter_EnumPins(destination, &pins);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not enumerate dest filter's pins.\n");
+            return AVERROR(EIO);
+        }
+
+        ///find destination's output pin
+        while (!(*ext_pin) && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
+            char *name_buf;
+            PIN_INFO info = {0};
+
+            IPin_QueryPinInfo(pin, &info);
+            IBaseFilter_Release(info.pFilter);
+            name_buf = dup_wchar_to_utf8(info.achName);
+            av_log(avctx, AV_LOG_INFO, "Ext filter pin [%s] dir %d wanted dir %d\n", name_buf, info.dir, PINDIR_OUTPUT);
+
+            if (info.dir == PINDIR_OUTPUT)
+                if ( (ext_pin_name==NULL) ||                                             //if output name empty
+                        ((ext_pin_name) && !(strcmp(name_buf,ext_pin_name))) )     //or output name not empty and equal to the current pin
+                *ext_pin = pin;
+        }
+
+        IEnumPins_Release(pins);
+
+        if (!(*ext_pin)) {
+            if (ext_pin_name)
+                av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have output (ext) pin named \"%s\".\n", ext_pin_name);
+            else
+                av_log(avctx, AV_LOG_ERROR, "Destination filter doesn't have output (ext) pin.\n");
+            return AVERROR(EIO);
+        }
+
+    }
+
+
+    return 0;
 }
 
 /**
@@ -853,7 +1127,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         av_log(avctx, AV_LOG_ERROR, "Could not create CaptureGraphBuilder2\n");
         goto error;
     }
-    ICaptureGraphBuilder2_SetFiltergraph(graph_builder2, graph);
+    r = ICaptureGraphBuilder2_SetFiltergraph(graph_builder2, graph);
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not set graph for CaptureGraphBuilder2\n");
         goto error;
@@ -1064,87 +1338,834 @@ static int dshow_read_header(AVFormatContext *avctx)
         goto error;
     }
 
-    ctx->video_codec_id = avctx->video_codec_id ? avctx->video_codec_id
-                                                : AV_CODEC_ID_RAWVIDEO;
-    if (ctx->pixel_format != AV_PIX_FMT_NONE) {
-        if (ctx->video_codec_id != AV_CODEC_ID_RAWVIDEO) {
-            av_log(avctx, AV_LOG_ERROR, "Pixel format may only be set when "
-                              "video codec is not set or set to rawvideo\n");
-            ret = AVERROR(EINVAL);
+    if (ctx->dtv){
+        IBaseFilter *bda_net_provider = NULL;
+        IBaseFilter *bda_source_device = NULL;
+        IBaseFilter *bda_receiver_device = NULL;
+        IBaseFilter *bda_mpeg2_demux = NULL;
+        IBaseFilter *bda_mpeg2_info = NULL;
+        libAVPin *capture_pin = NULL;
+        libAVFilter *capture_filter = NULL;
+        IScanningTuner *scanning_tuner = NULL;
+        IEnumTuningSpaces *tuning_space_enum = NULL;
+        ITuneRequest *tune_request = NULL;
+        ITuningSpace *tuning_space = NULL;
+        IDVBTuneRequest *dvb_tune_request = NULL;
+        IDVBTuningSpace2 *dvb_tuning_space2 = NULL;
+        IDVBSTuningSpace *dvbs_tuning_space = NULL;
+        IATSCChannelTuneRequest *atsc_tune_request = NULL;
+        ILocator *def_locator = NULL;
+        IDVBCLocator *dvbc_locator = NULL;
+        IDVBTLocator *dvbt_locator = NULL;
+        IDVBSLocator *dvbs_locator = NULL;
+        IATSCLocator *atsc_locator = NULL;
+        GUID CLSIDNetworkType = GUID_NULL;
+        GUID tuning_space_network_type = GUID_NULL;
+        IPin *bda_src = NULL;
+        ICaptureGraphBuilder2 *graph_builder2 = NULL;
+
+
+        const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
+
+
+        ///create graph
+
+        r = CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_IGraphBuilder, (void **) &graph);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not create capture graph.\n");
             goto error;
         }
-    }
-    if (ctx->framerate) {
-        r = av_parse_video_rate(&ctx->requested_framerate, ctx->framerate);
-        if (r < 0) {
-            av_log(avctx, AV_LOG_ERROR, "Could not parse framerate '%s'.\n", ctx->framerate);
+        ctx->graph = graph;
+
+        r = CoCreateInstance(&CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_ICreateDevEnum, (void **) &devenum);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not enumerate system devices.\n");
             goto error;
         }
-    }
 
-    r = CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
-                         &IID_IGraphBuilder, (void **) &graph);
-    if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not create capture graph.\n");
-        goto error;
-    }
-    ctx->graph = graph;
+        ///add microsoft network provider
 
-    r = CoCreateInstance(&CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER,
-                         &IID_ICreateDevEnum, (void **) &devenum);
-    if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not enumerate system devices.\n");
-        goto error;
-    }
+        if( ctx->dtv == 1 ) {
+            av_log(avctx, AV_LOG_INFO, "NetworkType: DVB-C\n" );
+            CLSIDNetworkType = CLSID_DVBCNetworkProvider;
+        } else if( ctx->dtv == 2 ) {
+            av_log(avctx, AV_LOG_INFO, "NetworkType: DVB-T\n" );
+            CLSIDNetworkType = CLSID_DVBTNetworkProvider;
+        } else if( ctx->dtv == 3 ) {
+            av_log(avctx, AV_LOG_INFO, "NetworkType: DVB-S\n" );
+            CLSIDNetworkType = CLSID_DVBSNetworkProvider;
+        } else if( ctx->dtv == 4 ) {
+            av_log(avctx, AV_LOG_INFO, "NetworkType: ATSC\n" );
+            CLSIDNetworkType = CLSID_ATSCNetworkProvider;
+        }else{
+            av_log(avctx, AV_LOG_INFO, "Unknown NetworkType: %d\n", ctx->dtv );
+            goto error;
+        }
 
-    if (ctx->list_devices) {
-        av_log(avctx, AV_LOG_INFO, "DirectShow video devices (some may be both video and audio devices)\n");
-        dshow_cycle_devices(avctx, devenum, VideoDevice, VideoSourceDevice, NULL);
-        av_log(avctx, AV_LOG_INFO, "DirectShow audio devices\n");
-        dshow_cycle_devices(avctx, devenum, AudioDevice, AudioSourceDevice, NULL);
-        ret = AVERROR_EXIT;
-        goto error;
-    }
-    if (ctx->list_options) {
-        if (ctx->device_name[VideoDevice])
-            if ((r = dshow_list_device_options(avctx, devenum, VideoDevice, VideoSourceDevice))) {
+
+        r = CoCreateInstance(&CLSIDNetworkType, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_IBaseFilter, (void **) &bda_net_provider);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not create BDA network provider\n");
+            goto error;
+        }
+
+        r = IGraphBuilder_AddFilter(graph, bda_net_provider, NULL);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not add BDA network provider to graph.\n");
+            goto error;
+        }
+
+
+        ///add dtv input
+        if (ctx->list_devices) {
+            av_log(avctx, AV_LOG_INFO, "BDA tuners:\n");
+            dshow_cycle_dtv_devices(avctx, NetworkTuner, devenum, NULL);
+            av_log(avctx, AV_LOG_INFO, "BDA receivers:\n");
+            dshow_cycle_dtv_devices(avctx, ReceiverComponent, devenum, NULL);
+            goto error;
+        }
+
+
+        //////////////////////////////////
+        /////////////setup tuner
+
+
+        ///create tune request
+
+        r = IBaseFilter_QueryInterface(bda_net_provider, &IID_IScanningTuner, (void**) &scanning_tuner);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not query scanning tuner.\n");
+            goto error;
+        }
+
+
+        r = IScanningTuner_EnumTuningSpaces(scanning_tuner, &tuning_space_enum);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not get tuning space enum.\n");
+            goto error;
+        }
+
+        tuning_space_network_type = GUID_NULL;
+
+
+        while (S_OK == IEnumTuningSpaces_Next(tuning_space_enum, 1, &tuning_space, NULL))
+        {
+            BSTR bstr_name = NULL;
+            char *psz_bstr_name = NULL;
+
+            SysFreeString(bstr_name);
+
+            r = ITuningSpace_get_FriendlyName(tuning_space, &bstr_name);
+            if(r != S_OK) {
+                /* should never fail on a good tuning space */
+                av_log(avctx, AV_LOG_ERROR, "Cannot get UniqueName for Tuning Space: r=0x%8x\n", r );
+                goto error;
+            }
+
+            psz_bstr_name = dup_wchar_to_utf8(bstr_name);
+            av_log(avctx, AV_LOG_INFO, "Using Tuning Space: %s\n", psz_bstr_name );
+
+
+            r = ITuningSpace_get__NetworkType(tuning_space, &tuning_space_network_type);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Error acquiring tuning space type.\n");
+                goto error;
+            }
+
+            if ( IsEqualGUID(&tuning_space_network_type, &CLSIDNetworkType) )
+                    break;
+
+            tuning_space_network_type = GUID_NULL;
+        }
+
+
+        if (IsEqualGUID(&tuning_space_network_type, &GUID_NULL)){
+            av_log(avctx, AV_LOG_ERROR, "Could not found right type tuning space.\n");
+            goto error;
+        }
+
+        r = IScanningTuner_put_TuningSpace(scanning_tuner, tuning_space);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could put in tuning space to scanning tuner\n");
+            goto error;
+        }
+
+        av_log(avctx, AV_LOG_INFO, "Using def locator\n");
+
+        r = ITuningSpace_get_DefaultLocator(tuning_space, &def_locator);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not get default locator\n");
+            goto error;
+        }
+
+        av_log(avctx, AV_LOG_INFO, "create tune request\n");
+
+
+        r = ITuningSpace_CreateTuneRequest(tuning_space, &tune_request);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not create test tune request\n");
+            goto error;
+        }
+
+        r = ITuneRequest_put_Locator(tune_request, def_locator);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could put default locator\n");
+            goto error;
+        }
+
+        av_log(avctx, AV_LOG_INFO, "Def loator pre validate\n");
+
+        r = IScanningTuner_Validate(scanning_tuner, tune_request);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Error validating dvb tune request: r=0x%8x\n", r);
+            goto error;
+        }
+
+        r = IScanningTuner_put_TuneRequest(scanning_tuner, tune_request);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not set dvb tune request\n");
+            goto error;
+        }
+
+
+        ///////////////
+        /////////////////////////////////////
+
+
+        ///---add network tuner
+        if ((r = dshow_cycle_dtv_devices(avctx, NetworkTuner, devenum, &bda_source_device)) < 0) {
+            ret = r;
+            av_log(avctx, AV_LOG_ERROR, "Could not find BDA tuner.\n");
+            goto error;
+        }
+
+        ctx->device_filter[VideoDevice] = bda_source_device;
+
+        r = IGraphBuilder_AddFilter(graph, bda_source_device, NULL);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not add BDA tuner to graph.\n");
+            goto error;
+        }
+
+
+        av_log(avctx, AV_LOG_INFO, "BDA tuner added\n");
+
+        ///connect msnetp and dtv
+
+        r = dshow_connect_bda_pins(avctx, bda_net_provider, NULL, bda_source_device, NULL, NULL, NULL);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not connect network provider to tuner. Trying generic Network Provider.\n");
+            r = IGraphBuilder_RemoveFilter(graph, bda_net_provider);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not remove old BDA network provider from graph.\n");
+                goto error;
+            }
+
+            r = CoCreateInstance(&CLSID_NetworkProvider, NULL, CLSCTX_INPROC_SERVER,
+                                 &IID_IBaseFilter, (void **) &bda_net_provider);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not create generic BDA network provider\n");
+                goto error;
+            }
+
+            r = IGraphBuilder_AddFilter(graph, bda_net_provider, NULL);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not add generic BDA network provider to graph.\n");
+                goto error;
+            }
+
+            r = dshow_connect_bda_pins(avctx, bda_net_provider, NULL, bda_source_device, NULL, NULL, NULL);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not connect generic network provider to tuner.\n");
+                goto error;
+            }
+
+            av_log(avctx, AV_LOG_INFO, "Generic Network Provider added\n");
+
+        }
+
+
+        ///---add receive component if present
+        if (ctx->receiver_component) {
+
+            if ((r = dshow_cycle_dtv_devices(avctx, ReceiverComponent, devenum, &bda_receiver_device)) < 0) {
                 ret = r;
                 goto error;
             }
+
+            ctx->device_filter[VideoDevice] = bda_receiver_device;
+
+            r = IGraphBuilder_AddFilter(graph, bda_receiver_device, NULL);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not add BDA receiver to graph.\n");
+                goto error;
+            }
+
+            av_log(avctx, AV_LOG_INFO, "BDA Receiver Component added\n");
+
+            ///connect tuner to receiver
+
+            r = dshow_connect_bda_pins(avctx, bda_source_device, NULL, bda_receiver_device, NULL, NULL, NULL);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not connect tuner to receiver component.\n");
+                goto error;
+            }
+        }
+
+
+        ///add MPEG-2 demultiplexer
+        r = CoCreateInstance(&CLSID_MPEG2Demultiplexer, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_IBaseFilter, (void **) &bda_mpeg2_demux);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not create BDA mpeg2 demux\n");
+            goto error;
+        }
+
+
+        r = IGraphBuilder_AddFilter(graph, bda_mpeg2_demux, NULL);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not add BDA mpeg2 demux to graph.\n");
+            goto error;
+        }
+
+        r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "003");
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux .\n");
+            goto error;
+        }
+
+        //add DBA MPEG2 Transport information filter
+
+        r = CoCreateInstance(&CLSID_BDA_MPEG2_Transport_Informatiuon_Filter, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_IBaseFilter, (void **) &bda_mpeg2_info);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not create BDA mpeg2 info filter\n");
+            goto error;
+        }
+
+
+        r = IGraphBuilder_AddFilter(graph, bda_mpeg2_info, NULL);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not add BDA mpeg2 transport info filter to graph.\n");
+            goto error;
+        }
+
+
+        r = dshow_connect_bda_pins(avctx, bda_mpeg2_demux, "001", bda_mpeg2_info, "IB Input", NULL, NULL);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not connect mpeg2 demux to mpeg2 transport information filter.\n");
+            goto error;
+        }
+
+
+        /////////////////////////////////
+        ///////////////DTV tuning
+
+        av_log(avctx, AV_LOG_INFO, "Using DBA tuning stuff\n");
+
+        r = IScanningTuner_get_TuneRequest(scanning_tuner, &tune_request);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not get tune request -- Trying to create one\n");
+            r = ITuningSpace_CreateTuneRequest(tuning_space, &tune_request);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not create tune request\n");
+                goto error;
+            }
+        }
+
+
+        //// if tuningspace == DVB
+        if ((ctx->dtv > 0) && (ctx->dtv < 4)) {
+
+            r = ITuneRequest_QueryInterface(tune_request, &IID_IDVBTuneRequest, (void **) &dvb_tune_request);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not query DVBTuneRequest.\n");
+                goto error;
+            }
+
+            av_log(avctx, AV_LOG_INFO, "DVBTuneRequest acquired.\n");
+
+            IDVBTuneRequest_put_ONID(dvb_tune_request, -1 );
+            IDVBTuneRequest_put_SID(dvb_tune_request, -1 );
+            IDVBTuneRequest_put_TSID(dvb_tune_request, -1 );
+
+            //// if tuningspace  == DVB-C
+            if (ctx->dtv==1){
+                r = CoCreateInstance(&CLSID_DVBCLocator, NULL, CLSCTX_INPROC_SERVER,
+                                     &IID_IDVBCLocator, (void **) &dvbc_locator);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not create DVB-C Locator\n");
+                    goto error;
+                }
+
+                r = IScanningTuner_get_TuningSpace(scanning_tuner, &tuning_space);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not get tuning space from scanning tuner\n");
+                    goto error;
+                }
+
+                r = ITuningSpace_QueryInterface(tuning_space, &IID_IDVBTuningSpace2, (void **) &dvb_tuning_space2);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not query DVBTuningSpace2\n");
+                    goto error;
+                }
+
+
+                r = IDVBTuningSpace2_put_SystemType(dvb_tuning_space2, DVB_Cable);
+                if(r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Cannot set dvb tuning space2 systyp\n");
+                    goto error;
+                }
+
+
+                if (ctx->tune_freq>0){
+                    av_log(avctx, AV_LOG_INFO, "Set frequency %ld\n", ctx->tune_freq);
+                    r = IDVBCLocator_put_CarrierFrequency(dvbc_locator, ctx->tune_freq );
+                    if (r != S_OK) {
+                        av_log(avctx, AV_LOG_ERROR, "Could not set DVB-C Locator\n");
+                        goto error;
+                    }
+                }
+
+
+                r = IDVBTuneRequest_put_Locator(dvb_tune_request, (ILocator *) dvbc_locator);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not set DVB-C Locator to DVBTuneRequest\n");
+                    goto error;
+                }
+
+                r = IScanningTuner_Validate(scanning_tuner, (ITuneRequest *) dvb_tune_request);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Error validating dvb tune request: r=0x%8x\n", r );
+                    goto error;
+                }
+
+                r = IScanningTuner_put_TuneRequest(scanning_tuner, (ITuneRequest *) dvb_tune_request);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not set dvb tune request\n");
+                    goto error;
+                }
+            }
+
+            //// if tuningspace  == DVB-T
+            if (ctx->dtv==2){
+                ///IDVBTuneRequest_put_SID(dvb_tune_request, 316 );
+
+                r = CoCreateInstance(&CLSID_DVBTLocator, NULL, CLSCTX_INPROC_SERVER,
+                                     &IID_IDVBTLocator, (void **) &dvbt_locator);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not create DVB-T Locator\n");
+                    goto error;
+                }
+
+                r = IScanningTuner_get_TuningSpace(scanning_tuner, &tuning_space);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not get tuning space from scanning tuner\n");
+                    goto error;
+                }
+
+                r = ITuningSpace_QueryInterface(tuning_space, &IID_IDVBTuningSpace2, (void **) &dvb_tuning_space2);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not query DVBTuningSpace2\n");
+                    goto error;
+                }
+
+
+                r = IDVBTuningSpace2_put_SystemType(dvb_tuning_space2, DVB_Terrestrial);
+                if(r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Cannot set dvb tuning space2 systyp\n");
+                    goto error;
+                }
+
+
+                if (ctx->tune_freq>0){
+                    av_log(avctx, AV_LOG_INFO, "Set frequency %ld\n", ctx->tune_freq);
+                    r = IDVBTLocator_put_CarrierFrequency(dvbt_locator, ctx->tune_freq );
+                    if (r != S_OK) {
+                        av_log(avctx, AV_LOG_ERROR, "Could not set DVB-T Locator\n");
+                        goto error;
+                    }
+                }
+
+
+                r = IDVBTuneRequest_put_Locator(dvb_tune_request, (ILocator *) dvbt_locator);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not set DVB-T Locator to DVBTuneRequest\n");
+                    goto error;
+                }
+
+                r = IScanningTuner_Validate(scanning_tuner, (ITuneRequest *) dvb_tune_request);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Error validating dvb tune request: r=0x%8x\n", r );
+                    goto error;
+                }
+
+                r = IScanningTuner_put_TuneRequest(scanning_tuner, (ITuneRequest *) dvb_tune_request);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not set dvb tune request\n");
+                    goto error;
+                }
+            }
+            //// if tuningspace  == DVB-S
+            if (ctx->dtv==3){
+                r = CoCreateInstance(&CLSID_DVBSLocator, NULL, CLSCTX_INPROC_SERVER,
+                                     &IID_IDVBSLocator, (void **) &dvbs_locator);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not create DVB-S Locator\n");
+                    goto error;
+                }
+
+                r = IScanningTuner_get_TuningSpace(scanning_tuner, &tuning_space);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not get tuning space from scanning tuner\n");
+                    goto error;
+                }
+
+                r = ITuningSpace_QueryInterface(tuning_space, &IID_IDVBSTuningSpace, (void **) &dvbs_tuning_space);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not query DVBSTuningSpace\n");
+                    goto error;
+                }
+
+
+                r = IDVBSTuningSpace_put_SystemType(dvbs_tuning_space, DVB_Satellite);
+                if(r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Cannot set dvbs tuning space systyp\n");
+                    goto error;
+                }
+
+
+                if (ctx->tune_freq>0){
+                    av_log(avctx, AV_LOG_INFO, "Set frequency %ld\n", ctx->tune_freq);
+                    r = IDVBSLocator_put_CarrierFrequency(dvbs_locator, ctx->tune_freq );
+                    if (r != S_OK) {
+                        av_log(avctx, AV_LOG_ERROR, "Could not set DVB-S Locator\n");
+                        goto error;
+                    }
+                }
+
+
+                r = IDVBTuneRequest_put_Locator(dvb_tune_request, (ILocator *) dvbs_locator);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not set DVB-S Locator to DVBTuneRequest\n");
+                    goto error;
+                }
+
+                r = IScanningTuner_Validate(scanning_tuner, (ITuneRequest *) dvb_tune_request);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Error validating dvb tune request: r=0x%8x\n", r );
+                    goto error;
+                }
+
+                r = IScanningTuner_put_TuneRequest(scanning_tuner, (ITuneRequest *) dvb_tune_request);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not set dvb tune request\n");
+                    goto error;
+                }
+            }
+
+        }
+
+        //// if tuningspace == ATSC
+        if (ctx->dtv == 4) {
+
+            r = ITuneRequest_QueryInterface(tune_request, &IID_IATSCChannelTuneRequest, (void **) &atsc_tune_request);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not query ATSCChannelTuneRequest.\n");
+                goto error;
+            }
+
+            av_log(avctx, AV_LOG_INFO, "ATSCChannelTuneRequest acquired.\n");
+
+            r = CoCreateInstance(&CLSID_ATSCLocator, NULL, CLSCTX_INPROC_SERVER,
+                                 &IID_IATSCLocator, (void **) &atsc_locator);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not create ATSC Locator\n");
+                goto error;
+            }
+
+            if (ctx->tune_freq>0){
+                av_log(avctx, AV_LOG_INFO, "Set frequency %ld\n", ctx->tune_freq);
+                r = IATSCLocator_put_CarrierFrequency(atsc_locator, ctx->tune_freq );
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not set ATSC Locator\n");
+                    goto error;
+                }
+            }
+
+            r = IATSCChannelTuneRequest_put_Locator(atsc_tune_request, (ILocator *) atsc_locator);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not set ATSC Locator to ATSCChannelTuneRequest\n");
+                goto error;
+            }
+
+            r = IScanningTuner_Validate(scanning_tuner, (ITuneRequest *) atsc_tune_request);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Error validating atsc tune request: r=0x%8x\n", r );
+                goto error;
+            }
+
+            r = IScanningTuner_put_TuneRequest(scanning_tuner, (ITuneRequest *) atsc_tune_request);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not set atsc tune request\n");
+                goto error;
+            }
+            av_log(avctx, AV_LOG_INFO, "success setting ATSC tune request");
+        }
+
+
+        ///////
+        ////////////////////////////////////////////
+
+
+        ////dshow_show_filter_properties(bda_net_provider, avctx);
+
+
+        ///add decoder
+
+//        r = CoCreateInstance(&CLSID_MS_DTV_DVD_Decoder, NULL, CLSCTX_INPROC_SERVER,
+//                             &IID_IBaseFilter, (void **) &ms_dtv_dec);
+//        if (r != S_OK) {
+//            av_log(avctx, AV_LOG_ERROR, "Could not create dtv decoder\n");
+//            goto error;
+//        }
+//
+//
+//        r = IGraphBuilder_AddFilter(graph, ms_dtv_dec, NULL);
+//        if (r != S_OK) {
+//            av_log(avctx, AV_LOG_ERROR, "Could not add dtv decoder to graph.\n");
+//            goto error;
+//        }
+//
+//        r = dshow_connect_bda_pins(avctx, bda_mpeg2_demux, "003", ms_dtv_dec, "Input", &bda_src, "Output");
+//        if (r != S_OK) {
+//            av_log(avctx, AV_LOG_ERROR, "Could not connect mpeg2 demux to dtv decoder.\n");
+//            goto error;
+//        }
+
+        //ctx->device_filter[VideoDevice]=ms_dtv_dec;
+        //ctx->device_filter[VideoDevice]=bda_mpeg2_demux;
+        ///add capture filter
+
+        capture_filter = libAVFilter_Create(avctx, callback, VideoDevice);
+        if (!capture_filter) {
+            av_log(avctx, AV_LOG_ERROR, "Could not create grabber filter.\n");
+            goto error;
+        }
+        ctx->capture_filter[VideoDevice] = capture_filter;
+
+        r = IGraphBuilder_AddFilter(graph, (IBaseFilter *) capture_filter,
+                                    filter_name[VideoDevice]);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not add capture filter to graph\n");
+            goto error;
+        }
+
+        libAVPin_AddRef(capture_filter->pin);
+        capture_pin = capture_filter->pin;
+        ctx->capture_pin[VideoDevice] = capture_pin;
+
+        av_log(avctx, AV_LOG_INFO, "Video capture filter added to graph\n");
+
+        if(!bda_src) {
+            av_log(avctx, AV_LOG_ERROR, "No output from bda source\n");
+            goto error;
+        }
+
+        r = CoCreateInstance(&CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_ICaptureGraphBuilder2, (void **) &graph_builder2);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not create CaptureGraphBuilder2\n");
+            goto error;
+        }
+
+        r = ICaptureGraphBuilder2_SetFiltergraph(graph_builder2, graph);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not set graph for CaptureGraphBuilder2\n");
+            goto error;
+        }
+
+        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_src, NULL /* no intermediate filter */,
+            (IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
+
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not RenderStream to connect pins\n");
+            goto error;
+        }
+
+
+        if (graph_builder2 != NULL)
+            ICaptureGraphBuilder2_Release(graph_builder2);
+
+        if (ctx->dtv_graph_file) {
+            const WCHAR wszStreamName[] = L"ActiveMovieGraph";
+            IStorage *p_storage = NULL;
+            IStream *ofile_stream = NULL;
+            IPersistStream *pers_stream = NULL;
+            WCHAR *gfilename = NULL;
+
+            gfilename = malloc((strlen(ctx->dtv_graph_file)+4)*sizeof(WCHAR));
+
+            mbstowcs(gfilename, ctx->dtv_graph_file, strlen(ctx->dtv_graph_file)+4);
+
+
+            r = StgCreateDocfile(gfilename, STGM_CREATE | STGM_TRANSACTED | STGM_READWRITE | STGM_SHARE_EXCLUSIVE,
+                    0, &p_storage);
+            if (S_OK != r) {
+                av_log(avctx, AV_LOG_ERROR, "Could not create graph dump file.\n");
+                goto error;
+            }
+
+
+            r = IStorage_CreateStream(p_storage, wszStreamName, STGM_WRITE | STGM_CREATE | STGM_SHARE_EXCLUSIVE, 0, 0, &ofile_stream);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Creating IStream failed.\n");
+                goto error;
+            }
+
+            r  = IBaseFilter_QueryInterface(graph, &IID_IPersistStream, (void **) &pers_stream);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Graph query for IPersistStream failed.\n");
+                goto error;
+            }
+
+            if (!pers_stream) {
+                av_log(avctx, AV_LOG_ERROR, "IPersistStream == NULL.\n");
+                goto error;
+            }
+
+
+            //r = OleSaveToStream(pers_stream, ofile_stream);
+            r = IPersistStream_Save(pers_stream, ofile_stream, TRUE);
+
+
+            //if (SUCCEEDED(r)) {
+                r = IStorage_Commit(p_storage, STGC_DEFAULT);       /// for some reason, it does not save if check properly
+            //}
+//            if (r != S_OK) {
+//                av_log(avctx, AV_LOG_ERROR, "Could not save capture dtv graph \n");
+//                goto error;
+//            }
+//
+//            r = IStorage_Commit(ofile_stream, STGC_DEFAULT);
+//            if (S_OK != r) {
+//                av_log(avctx, AV_LOG_ERROR, "Could not commit dtv graph data to file.\n");
+//                goto error;
+//            }
+
+            IStream_Release(ofile_stream);
+            IPersistStream_Release(pers_stream);
+
+            IStorage_Release(p_storage);
+
+            free(gfilename);
+
+            av_log(avctx, AV_LOG_INFO, "Graph dump has been saved successfully.\n");
+
+        }
+
+
+        av_log(avctx, AV_LOG_INFO, "Video capture filter connected\n");
+
+        if ((r = dshow_add_device(avctx, VideoDevice)) < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Could not add video device.\n");
+            goto error;
+        }
+
+
+        ////needs properties for demux too....???
+
+    }
+
+    else {
+        ctx->video_codec_id = avctx->video_codec_id ? avctx->video_codec_id
+                                                    : AV_CODEC_ID_RAWVIDEO;
+        if (ctx->pixel_format != AV_PIX_FMT_NONE) {
+            if (ctx->video_codec_id != AV_CODEC_ID_RAWVIDEO) {
+                av_log(avctx, AV_LOG_ERROR, "Pixel format may only be set when "
+                                  "video codec is not set or set to rawvideo\n");
+                ret = AVERROR(EINVAL);
+                goto error;
+            }
+        }
+        if (ctx->framerate) {
+            r = av_parse_video_rate(&ctx->requested_framerate, ctx->framerate);
+            if (r < 0) {
+                av_log(avctx, AV_LOG_ERROR, "Could not parse framerate '%s'.\n", ctx->framerate);
+                goto error;
+            }
+        }
+
+        r = CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_IGraphBuilder, (void **) &graph);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not create capture graph.\n");
+            goto error;
+        }
+        ctx->graph = graph;
+
+        r = CoCreateInstance(&CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_ICreateDevEnum, (void **) &devenum);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not enumerate system devices.\n");
+            goto error;
+        }
+
+        if (ctx->list_devices) {
+            av_log(avctx, AV_LOG_INFO, "DirectShow video devices (some may be both video and audio devices)\n");
+            dshow_cycle_devices(avctx, devenum, VideoDevice, VideoSourceDevice, NULL);
+            av_log(avctx, AV_LOG_INFO, "DirectShow audio devices\n");
+            dshow_cycle_devices(avctx, devenum, AudioDevice, AudioSourceDevice, NULL);
+            ret = AVERROR_EXIT;
+            goto error;
+        }
+        if (ctx->list_options) {
+            if (ctx->device_name[VideoDevice])
+                if ((r = dshow_list_device_options(avctx, devenum, VideoDevice, VideoSourceDevice))) {
+                    ret = r;
+                    goto error;
+                }
+            if (ctx->device_name[AudioDevice]) {
+                if (dshow_list_device_options(avctx, devenum, AudioDevice, AudioSourceDevice)) {
+                    /* show audio options from combined video+audio sources as fallback */
+                    if ((r = dshow_list_device_options(avctx, devenum, AudioDevice, VideoSourceDevice))) {
+                        ret = r;
+                        goto error;
+                    }
+                }
+            }
+        }
+        if (ctx->device_name[VideoDevice]) {
+            if ((r = dshow_open_device(avctx, devenum, VideoDevice, VideoSourceDevice)) < 0 ||
+                (r = dshow_add_device(avctx, VideoDevice)) < 0) {
+                ret = r;
+                goto error;
+            }
+        }
         if (ctx->device_name[AudioDevice]) {
-            if (dshow_list_device_options(avctx, devenum, AudioDevice, AudioSourceDevice)) {
-                /* show audio options from combined video+audio sources as fallback */
-                if ((r = dshow_list_device_options(avctx, devenum, AudioDevice, VideoSourceDevice))) {
+            if ((r = dshow_open_device(avctx, devenum, AudioDevice, AudioSourceDevice)) < 0 ||
+                (r = dshow_add_device(avctx, AudioDevice)) < 0) {
+                av_log(avctx, AV_LOG_INFO, "Searching for audio device within video devices for %s\n", ctx->device_name[AudioDevice]);
+                /* see if there's a video source with an audio pin with the given audio name */
+                if ((r = dshow_open_device(avctx, devenum, AudioDevice, VideoSourceDevice)) < 0 ||
+                    (r = dshow_add_device(avctx, AudioDevice)) < 0) {
                     ret = r;
                     goto error;
                 }
             }
         }
-    }
-    if (ctx->device_name[VideoDevice]) {
-        if ((r = dshow_open_device(avctx, devenum, VideoDevice, VideoSourceDevice)) < 0 ||
-            (r = dshow_add_device(avctx, VideoDevice)) < 0) {
-            ret = r;
+        if (ctx->list_options) {
+            /* allow it to list crossbar options in dshow_open_device */
+            ret = AVERROR_EXIT;
             goto error;
         }
+
     }
-    if (ctx->device_name[AudioDevice]) {
-        if ((r = dshow_open_device(avctx, devenum, AudioDevice, AudioSourceDevice)) < 0 ||
-            (r = dshow_add_device(avctx, AudioDevice)) < 0) {
-            av_log(avctx, AV_LOG_INFO, "Searching for audio device within video devices for %s\n", ctx->device_name[AudioDevice]);
-            /* see if there's a video source with an audio pin with the given audio name */
-            if ((r = dshow_open_device(avctx, devenum, AudioDevice, VideoSourceDevice)) < 0 ||
-                (r = dshow_add_device(avctx, AudioDevice)) < 0) {
-                ret = r;
-                goto error;
-            }
-        }
-    }
-    if (ctx->list_options) {
-        /* allow it to list crossbar options in dshow_open_device */
-        ret = AVERROR_EXIT;
-        goto error;
-    }
+
+
     ctx->curbufsize[0] = 0;
     ctx->curbufsize[1] = 0;
     ctx->mutex = CreateMutex(NULL, 0, NULL);
@@ -1302,6 +2323,14 @@ static const AVOption options[] = {
     { "audio_device_save", "save audio capture filter device (and properties) to file", OFFSET(audio_filter_save_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "video_device_load", "load video capture filter device (and properties) from file", OFFSET(video_filter_load_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "video_device_save", "save video capture filter device (and properties) to file", OFFSET(video_filter_save_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { "dtv", "use digital tuner instead of analog", OFFSET(dtv), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 4, DEC, "dtv" },
+    { "c", "DVB-C", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "dtv" },
+    { "t", "DVB-T", 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, DEC, "dtv" },
+    { "s", "DVB-S", 0, AV_OPT_TYPE_CONST, {.i64=3}, 0, 0, DEC, "dtv" },
+    { "a", "ATSC", 0, AV_OPT_TYPE_CONST, {.i64=4}, 0, 0, DEC, "dtv" },
+    { "tune_freq", "set channel frequency (kHz)", OFFSET(tune_freq), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "receiver_component", "BDA receive component filter name", OFFSET(receiver_component), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { "dump_dtv_graph", "save dtv graph to file", OFFSET(dtv_graph_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { NULL },
 };
 

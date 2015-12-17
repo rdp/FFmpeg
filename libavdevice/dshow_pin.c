@@ -43,14 +43,18 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
     enum dshowDeviceType devtype = this->filter->type;
     dshowdebug("libAVPin_ReceiveConnection(%p)\n", this);
 
-    if (!pin)
+    if (!pin){
+        dshowdebug(" no pin (%p)\n", this);
         return E_POINTER;
-    if (this->connectedto)
+    }
+    if (this->connectedto){
+        dshowdebug(" already connected(%p)\n", this);
         return VFW_E_ALREADY_CONNECTED;
+    }
 
     ff_print_AM_MEDIA_TYPE(type);
     if (devtype == VideoDevice) {
-        if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video))
+        if ( (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video)) || (IsEqualGUID(&type->formattype, &FORMAT_MPEG2_VIDEO)) )
             return VFW_E_TYPE_NOT_ACCEPTED;
     } else {
         if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio))
