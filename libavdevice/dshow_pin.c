@@ -301,6 +301,13 @@ libAVMemInputPin_GetAllocatorRequirements(libAVMemInputPin *this,
     dshowdebug("libAVMemInputPin_GetAllocatorRequirements(%p)\n", this);
     return E_NOTIMPL;
 }
+    REFERENCE_TIME curtime;
+    REFERENCE_TIME dummy2;
+    REFERENCE_TIME orig_curtime;
+    REFERENCE_TIME dummy3;
+    REFERENCE_TIME graphtime;
+    REFERENCE_TIME dummy4;
+
 long WINAPI
 libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
 {
@@ -311,12 +318,9 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     uint8_t *buf;
     int buf_size; /* todo should be a long? */
     int index;
-    int64_t curtime;
-    int64_t orig_curtime;
-    int64_t graphtime;
     const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
     IReferenceClock *clock = pin->filter->clock;
-    int64_t dummy;
+    REFERENCE_TIME dummy;
     struct dshow_ctx *ctx;
 
 
@@ -324,16 +328,27 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
 
     if (!sample)
         return E_POINTER;
-
+    // start time seems to work ok
     IMediaSample_GetTime(sample, &orig_curtime, &dummy);
+    printf("adding %lld to %lld\n", pin->filter->start_time, orig_curtime);
+    IMediaSample_GetTime(sample, &dummy2, &dummy);
+    printf("adding %lld to %lld\n", pin->filter->start_time, dummy2);
+    IMediaSample_GetTime(sample, &dummy3, &dummy);
+    printf("adding %lld to %lld\n", pin->filter->start_time, dummy3);
+
     orig_curtime += pin->filter->start_time;
     IReferenceClock_GetTime(clock, &graphtime);
-    if (devtype == VideoDevice && 0) {
+    if (devtype == VideoDevice) {
         /* PTS from video devices is unreliable. */
         IReferenceClock_GetTime(clock, &curtime);
+       printf("here1");
     } else {
         IMediaSample_GetTime(sample, &curtime, &dummy);
+        printf("22adding %lld to %lld\n", pin->filter->start_time, curtime);
+        curtime += pin->filter->start_time;
+        printf("here2");
         if(curtime > 400000000000000000LL) {
+        printf("heree");
             /* initial frames sometimes start < 0 (shown as a very large number here,
                like 437650244077016960 which FFmpeg doesn't like.
                TODO figure out math. For now just drop them. */
@@ -341,7 +356,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
                 "dshow dropping initial (or ending) audio frame with odd PTS too high %"PRId64"\n", curtime);
             return S_OK;
         }
-        curtime += pin->filter->start_time;
+        av_log(NULL, AV_LOG_VERBOSE, "after calculating both same  %lld ==  %lld \n", orig_curtime, curtime );
     }
 
     buf_size = IMediaSample_GetActualDataLength(sample);
@@ -352,7 +367,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     index = pin->filter->stream_index;
 
     av_log(NULL, AV_LOG_VERBOSE, "dshow passing through packet of type %s size %8d "
-        "timestamp %"PRId64" orig timestamp %"PRId64" graph timestamp %"PRId64" diff %"PRId64" %s\n",
+        "timestamp %lld orig timestamp %lld graph timestamp %lld diff %lld %s\n",
         devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, ctx->device_name[devtype]);
     pin->filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
 
