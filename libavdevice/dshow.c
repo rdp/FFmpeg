@@ -1634,6 +1634,14 @@ static int dshow_read_header(AVFormatContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "success infinite tee to graph.\n");
 
 
+
+        r = dshow_connect_bda_pins(avctx, bda_filter_supplying_mpeg, NULL, bda_infinite_tee, NULL, NULL, NULL);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not connect bda supplier to infinite tee.\n");
+            goto error;
+        }
+
+
         r = CoCreateInstance(&CLSID_MPEG2Demultiplexer, NULL, CLSCTX_INPROC_SERVER,
                              &IID_IBaseFilter, (void **) &bda_mpeg2_demux);
         if (r != S_OK) {
@@ -1647,9 +1655,9 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = dshow_connect_bda_pins(avctx, bda_filter_supplying_mpeg, NULL, bda_mpeg2_demux, NULL, &bda_src_pin, "3"); // TODO fix me! 003 also
+        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_src_pin, "3"); // TODO fix me! 003 also
         if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux, tried twice! .\n");
+            av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux! .\n");
             goto error;
         }
 
