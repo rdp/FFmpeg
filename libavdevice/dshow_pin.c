@@ -53,15 +53,9 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
     }
     ff_print_AM_MEDIA_TYPE(type);
     if (devtype == VideoDevice) {
-       // stream is from BDA TV old way
+       // stream is from BDA TV old way :|
         if ( (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video)) && !IsEqualGUID(&type->majortype, &MEDIATYPE_Stream) )
             return VFW_E_TYPE_NOT_ACCEPTED;
-       if (IsEqualGUID(&type->formattype, &FORMAT_MPEG2_VIDEO))  {
-            av_log(NULL, AV_LOG_DEBUG, "rejected FORMAT_MPEG2_VIDEO a format\n"); // don't handle it quite right today, force them
-           // to retry with "NV12" option...not sure who is doing the converting in that case possibly RenderStream is inserting a converter for us and "trying it" as it were
-            return VFW_E_TYPE_NOT_ACCEPTED;
-       }
-
     } else {
         if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio))
             return VFW_E_TYPE_NOT_ACCEPTED;

@@ -41,15 +41,13 @@ long ff_copy_dshow_media_type(AM_MEDIA_TYPE *dst, const AM_MEDIA_TYPE *src)
 
 void ff_printGUID(const GUID *g)
 {
-#if DSHOWDEBUG
     const uint32_t *d = (const uint32_t *) &g->Data1;
     const uint16_t *w = (const uint16_t *) &g->Data2;
     const uint8_t  *c = (const uint8_t  *) &g->Data4;
 
-    dshowdebug("0x%08x 0x%04x 0x%04x %02x%02x%02x%02x%02x%02x%02x%02x",
+    av_log(NULL, AV_LOG_INFO, "0x%08x 0x%04x 0x%04x %02x%02x%02x%02x%02x%02x%02x%02x",
                d[0], w[0], w[1],
                c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]);
-#endif
 }
 
 static const char *dshow_context_to_name(void *ptr)
@@ -63,7 +61,7 @@ const AVClass *ff_dshow_context_class_ptr = &ff_dshow_context_class;
     dshowdebug("      "#var":\t%"type"\n", sname->var)
 
 #if DSHOWDEBUG
-static void dump_bih(void *s, BITMAPINFOHEADER *bih)
+void dump_bih(void *s, BITMAPINFOHEADER *bih)
 {
     dshowdebug("      BITMAPINFOHEADER\n");
     dstruct(s, bih, biSize, "lu");
@@ -160,8 +158,15 @@ void ff_print_AM_MEDIA_TYPE(const AM_MEDIA_TYPE *type)
         dshowdebug("      dwBitErrorRate: %lu\n", v->dwBitErrorRate);
         dshowdebug("      AvgTimePerFrame: %"PRId64"\n", v->AvgTimePerFrame);
         dump_bih(NULL, &v->bmiHeader);
-    } else if (IsEqualGUID(&type->formattype, &FORMAT_VideoInfo2)) {
-        VIDEOINFOHEADER2 *v = (void *) type->pbFormat;
+    } else if (IsEqualGUID(&type->formattype, &FORMAT_VideoInfo2) || (IsEqualGUID(&type->formattype, &FORMAT_MPEG2_VIDEO) && type->cbFormat >= sizeof(MPEG2VIDEOINFO))) {
+        VIDEOINFOHEADER2 *v;
+        if (IsEqualGUID(&type->formattype, &FORMAT_MPEG2_VIDEO)) {
+          MPEG2VIDEOINFO *mpeg_video_info = (void *) type->pbFormat;
+          v = (void *) &mpeg_video_info->hdr;
+          printf("type addr %d mpeg2 addr %d\n", type, mpeg_video_info);
+        } else
+           v = (void *) type->pbFormat;
+
         dshowdebug("      rcSource: left %ld top %ld right %ld bottom %ld\n",
                    v->rcSource.left, v->rcSource.top, v->rcSource.right, v->rcSource.bottom);
         dshowdebug("      rcTarget: left %ld top %ld right %ld bottom %ld\n",

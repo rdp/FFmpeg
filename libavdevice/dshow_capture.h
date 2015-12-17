@@ -45,9 +45,10 @@ void ff_print_VIDEO_STREAM_CONFIG_CAPS(const VIDEO_STREAM_CONFIG_CAPS *caps);
 void ff_print_AUDIO_STREAM_CONFIG_CAPS(const AUDIO_STREAM_CONFIG_CAPS *caps);
 void ff_print_AM_MEDIA_TYPE(const AM_MEDIA_TYPE *type);
 void ff_printGUID(const GUID *g);
+void dump_bih(void *s, BITMAPINFOHEADER *bih);
 
 extern const AVClass *ff_dshow_context_class_ptr;
-#define dshowdebug(...) ff_dlog(&ff_dshow_context_class_ptr, __VA_ARGS__)
+#define dshowdebug(...) av_log(&ff_dshow_context_class_ptr, AV_LOG_DEBUG, __VA_ARGS__)
 
 static inline void nothing(void *foo)
 {

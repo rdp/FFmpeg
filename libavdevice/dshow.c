@@ -54,6 +54,7 @@ static const CLSID CLSID_MS_DTV_DVD_Decoder =
 
 static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
 {
+    enum AVPixelFormat out;
     switch(biCompression) {
     case BI_BITFIELDS:
     case BI_RGB:
@@ -72,7 +73,10 @@ static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
                 return AV_PIX_FMT_0RGB32;
         }
     }
-    return avpriv_find_pix_fmt(avpriv_get_raw_pix_fmt_tags(), biCompression); // all others
+    out = avpriv_find_pix_fmt(avpriv_get_raw_pix_fmt_tags(), biCompression); // all others
+    if (out == AV_PIX_FMT_NONE)
+      av_log(NULL, AV_LOG_ERROR, "unable to determine pixel format? %d %d\n", biCompression, biBitCount);
+    return out;
 }
 
 static int
@@ -1141,6 +1145,7 @@ dshow_add_device(AVFormatContext *avctx,
     AVCodecContext *codec;
     AVStream *st;
     int ret = AVERROR(EIO);
+    int is_mpeg = 0;
 
     st = avformat_new_stream(avctx, NULL);
     if (!st) {
@@ -1152,12 +1157,13 @@ dshow_add_device(AVFormatContext *avctx,
     ctx->capture_filter[devtype]->stream_index = st->index;
 
     libAVPin_ConnectionMediaType(ctx->capture_pin[devtype], &type);
+    printf("here is it\n");
+    ff_print_AM_MEDIA_TYPE(&type);
 
     codec = st->codec;
     if (devtype == VideoDevice) {
         BITMAPINFOHEADER *bih = NULL;
         AVRational time_base;
-        ff_print_AM_MEDIA_TYPE(&type);
         if (IsEqualGUID(&type.formattype, &FORMAT_VideoInfo)) {
             VIDEOINFOHEADER *v = (void *) type.pbFormat;
             time_base = (AVRational) { v->AvgTimePerFrame, 10000000 };
@@ -1166,12 +1172,20 @@ dshow_add_device(AVFormatContext *avctx,
             VIDEOINFOHEADER2 *v = (void *) type.pbFormat;
             time_base = (AVRational) { v->AvgTimePerFrame, 10000000 };
             bih = &v->bmiHeader;
+        } else if (IsEqualGUID(&type.formattype, &FORMAT_MPEG2_VIDEO) && type.cbFormat >= sizeof(MPEG2VIDEOINFO)) {
+          MPEG2VIDEOINFO *mpeg_video_info = (void *) type.pbFormat;
+          VIDEOINFOHEADER2 *v = (void *) &mpeg_video_info->hdr;
+          time_base = (AVRational) { v->AvgTimePerFrame, 10000000 };
+          bih = &v->bmiHeader;
+          is_mpeg = 1;
         }
         if (!bih) {
             av_log(avctx, AV_LOG_ERROR, "Could not get media type.\n");
             ff_printGUID(&type.formattype);
             goto error;
         }
+        printf("bih from it\n");
+        dump_bih(NULL, bih);
 
         codec->time_base  = time_base;
         codec->codec_type = AVMEDIA_TYPE_VIDEO;
@@ -1184,12 +1198,16 @@ dshow_add_device(AVFormatContext *avctx,
             codec->color_range = AVCOL_RANGE_MPEG; // just in case it needs this...
         }
         if (codec->pix_fmt == AV_PIX_FMT_NONE) {
-            const AVCodecTag *const tags[] = { avformat_get_riff_video_tags(), NULL };
-            codec->codec_id = av_codec_get_id(tags, bih->biCompression);
-            if (codec->codec_id == AV_CODEC_ID_NONE) {
-                av_log(avctx, AV_LOG_ERROR, "Unknown compression type. "
-                                 "Please report type 0x%X.\n", (int) bih->biCompression);
-                return AVERROR_PATCHWELCOME;
+             const AVCodecTag *const tags[] = { avformat_get_riff_video_tags(), NULL };
+             if (is_mpeg) {
+               codec->codec_id = AV_CODEC_ID_MPEG2VIDEO;
+             } else {
+               codec->codec_id = av_codec_get_id(tags, bih->biCompression);
+               if (codec->codec_id == AV_CODEC_ID_NONE) {
+                   av_log(avctx, AV_LOG_ERROR, "Unknown compression type. "
+                                  "Please report type 0x%X.\n", (int) bih->biCompression);
+                   return AVERROR_PATCHWELCOME;
+              }
             }
             codec->bits_per_coded_sample = bih->biBitCount;
         } else {
