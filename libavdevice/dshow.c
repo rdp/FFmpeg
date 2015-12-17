@@ -32,7 +32,6 @@
 #include "tuner.h"
 #include "bdadefs.h"
 
-
 static const CLSID CLSID_NetworkProvider =
     {0xB2F3A67C,0x29DA,0x4C78,{0x88,0x31,0x09,0x1E,0xD5,0x09,0xA4,0x75}};
 static const GUID KSCATEGORY_BDA_NETWORK_TUNER =
@@ -41,7 +40,8 @@ static const GUID KSCATEGORY_BDA_RECEIVER_COMPONENT    =
     {0xFD0A5AF4,0xB41D,0x11d2,{0x9c,0x95,0x00,0xc0,0x4f,0x79,0x71,0xe0}};
 static const GUID KSCATEGORY_BDA_TRANSPORT_INFORMATION =
     {0xa2e3074f,0x6c3d,0x11d3,{0xb6,0x53,0x00,0xc0,0x4f,0x79,0x49,0x8e}};
-
+static const GUID KSDATAFORMAT_SUBTYPE_BDA_MPEG2_TRANSPORT_LOCAL =
+    {0xf4aeb342,0x0329,0x4fdd,{0xa8,0xfd,0x4a,0xff,0x49,0x26,0xc9,0x78}};
 
 //const CLSID CLSID_MPEG2Demultiplexer =
 //    {0xAFB6C280,0x2C41,0x11D3,{0x8A,0x60,0x00,0x00,0xF8,0x1E,0x0E,0x4A}};
@@ -49,7 +49,6 @@ static const CLSID CLSID_BDA_MPEG2_Transport_Informatiuon_Filter =
     {0xFC772AB0,0x0C7F,0x11D3,{0x8F,0xF2,0x00,0xA0,0xC9,0x22,0x4C,0xF4}};
 static const CLSID CLSID_MS_DTV_DVD_Decoder =
     {0x212690FB,0x83E5,0x4526,{0x8F,0xD7,0x74,0x47,0x8B,0x79,0x39,0xCD}}; //ms dtv decoder
-
 
 
 
@@ -1158,7 +1157,7 @@ dshow_add_device(AVFormatContext *avctx,
     if (devtype == VideoDevice) {
         BITMAPINFOHEADER *bih = NULL;
         AVRational time_base;
-
+        ff_print_AM_MEDIA_TYPE(&type);
         if (IsEqualGUID(&type.formattype, &FORMAT_VideoInfo)) {
             VIDEOINFOHEADER *v = (void *) type.pbFormat;
             time_base = (AVRational) { v->AvgTimePerFrame, 10000000 };
@@ -1167,7 +1166,12 @@ dshow_add_device(AVFormatContext *avctx,
             VIDEOINFOHEADER2 *v = (void *) type.pbFormat;
             time_base = (AVRational) { v->AvgTimePerFrame, 10000000 };
             bih = &v->bmiHeader;
-        }
+        } else if (IsEqualGUID(&type.subtype, &KSDATAFORMAT_SUBTYPE_BDA_MPEG2_TRANSPORT_LOCAL)) {
+            avpriv_set_pts_info(st, 60, 1, 27000000);
+         codec->codec_id = AV_CODEC_ID_MPEG2TS;
+          codec->codec_type = AVMEDIA_TYPE_DATA;
+          goto done;
+        } 
         if (!bih) {
             av_log(avctx, AV_LOG_ERROR, "Could not get media type.\n");
             goto error;
@@ -1222,7 +1226,7 @@ dshow_add_device(AVFormatContext *avctx,
     }
 
     avpriv_set_pts_info(st, 64, 1, 10000000);
-
+done:
     ret = 0;
 
 error:
@@ -1310,7 +1314,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         IATSCLocator *atsc_locator = NULL;
         GUID CLSIDNetworkType = GUID_NULL;
         GUID tuning_space_network_type = GUID_NULL;
-        IPin *bda_video_out_of_mpeg_demuxer_pin = NULL;
+        IPin *bda_mpeg_raw_stream_pin = NULL;
         ICaptureGraphBuilder2 *graph_builder2 = NULL;
 
 
@@ -1502,7 +1506,7 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         av_log(avctx, AV_LOG_INFO, "BDA tuner added\n");
 
-        ///connect msnetp and dtv
+        ///connect msnetprovider and dtv
 
         r = dshow_connect_bda_pins(avctx, bda_net_provider, NULL, bda_source_device, NULL, NULL, NULL);
         if (r != S_OK) {
@@ -1599,13 +1603,14 @@ static int dshow_read_header(AVFormatContext *avctx)
             av_log(avctx, AV_LOG_ERROR, "Could not add BDA mpeg2 demux to graph.\n");
             goto error;
         }
-        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_video_out_of_mpeg_demuxer_pin, "3"); // TODO fix me! 003 also
+        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, NULL, NULL); // TODO fix me! 003 also '3"
+//        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_mpeg_raw_stream_pin, "3"); // TODO fix me! 003 also
+
 
         // after this point the infinite tee will now have an "Output2" named pin
-        //av_log(avctx, AV_LOG_ERROR, "starting bad\n");
-        //r = dshow_connect_bda_pins(avctx, NULL, NULL, bda_infinite_tee, NULL, &bda_video_out_of_mpeg_demuxer_pin, "Output2");
-        if (r != S_OK || !bda_video_out_of_mpeg_demuxer_pin) {
-            av_log(avctx, AV_LOG_ERROR, "Could not get right output pin for mpeg tee spliter! .\n");
+        av_log(avctx, AV_LOG_ERROR, "starting badish\n");
+        r = dshow_lookup_pin(avctx, bda_infinite_tee, PINDIR_OUTPUT, &bda_mpeg_raw_stream_pin, "Output2", "split mpeg tee pin");
+        if (r != S_OK) {
             goto error;
         }
 
@@ -1926,9 +1931,9 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_video_out_of_mpeg_demuxer_pin, NULL /* no intermediate filter */,
+        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_mpeg_raw_stream_pin, NULL /* no intermediate filter */,
             (IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
-       // this in essence just connected bda_video_out_of_mpeg_demuxer_pin with capture_filter->capture_pin no real need for RenderStream
+       // this in essence just connected bda_mpeg_raw_stream_pin with capture_filter->capture_pin no real need for RenderStream
 
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not RenderStream to connect pins\n");
