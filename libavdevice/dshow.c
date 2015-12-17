@@ -781,6 +781,7 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
         av_log(avctx, AV_LOG_ERROR, "Could not connect pins.\n");
         return AVERROR(EIO);
     }
+    // TODO I think this doesn't disconnect on failure...
 
     ///find output pin
     if (ext_pin != NULL) {
@@ -1362,7 +1363,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         IATSCLocator *atsc_locator = NULL;
         GUID CLSIDNetworkType = GUID_NULL;
         GUID tuning_space_network_type = GUID_NULL;
-        IPin *bda_src = NULL;
+        IPin *bda_src_pin = NULL;
         ICaptureGraphBuilder2 *graph_builder2 = NULL;
 
 
@@ -1648,7 +1649,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         }
 
         // this does a double connect I believe, to setup the demux all the way to "VideoDevice"
-        r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "3"); // TODO fix me! 003 also
+        r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src_pin, "3"); // TODO fix me! 003 also
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux, tried twice! .\n");
             goto error;
@@ -1959,7 +1960,7 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         av_log(avctx, AV_LOG_INFO, "Video capture filter added to graph\n");
 
-        if(!bda_src) {
+        if(!bda_src_pin) {
             av_log(avctx, AV_LOG_ERROR, "No output from bda source\n");
             goto error;
         }
@@ -1977,7 +1978,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_src, NULL /* no intermediate filter */,
+        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_src_pin, NULL /* no intermediate filter */,
             (IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
 
         if (r != S_OK) {
