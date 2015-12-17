@@ -1364,7 +1364,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         IATSCLocator *atsc_locator = NULL;
         GUID CLSIDNetworkType = GUID_NULL;
         GUID tuning_space_network_type = GUID_NULL;
-        IPin *bda_video_out_of_mpeg_demuxer_ping = NULL;
+        IPin *bda_video_out_of_mpeg_demuxer_pin = NULL;
         ICaptureGraphBuilder2 *graph_builder2 = NULL;
 
 
@@ -1599,7 +1599,7 @@ static int dshow_read_header(AVFormatContext *avctx)
                 goto error;
             }
 
-            bda_filter_supplying_mpeg = bda_receiver_device; // temporary save so we can connect provider to it
+            bda_filter_supplying_mpeg = bda_receiver_device; 
 
             r = IGraphBuilder_AddFilter(graph, bda_receiver_device, NULL);
             if (r != S_OK) {
@@ -1655,7 +1655,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_video_out_of_mpeg_demuxer_ping, "3"); // TODO fix me! 003 also
+        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_video_out_of_mpeg_demuxer_pin, "3"); // TODO fix me! 003 also
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux! .\n");
             goto error;
@@ -1959,13 +1959,13 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        libAVPin_AddRef(capture_filter->pin);
         capture_pin = capture_filter->pin;
+        libAVPin_AddRef(capture_filter->pin);
         ctx->capture_pin[VideoDevice] = capture_pin;
 
         av_log(avctx, AV_LOG_INFO, "Video capture filter added to graph\n");
 
-        if(!bda_video_out_of_mpeg_demuxer_ping) {
+        if(!bda_video_out_of_mpeg_demuxer_pin) {
             av_log(avctx, AV_LOG_ERROR, "No output from bda source\n");
             goto error;
         }
@@ -1983,9 +1983,9 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_video_out_of_mpeg_demuxer_ping, NULL /* no intermediate filter */,
+        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_video_out_of_mpeg_demuxer_pin, NULL /* no intermediate filter */,
             (IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
-       // this in essence just connected bda_video_out_of_mpeg_demuxer_ping with capture_filter->capture_pin 
+       // this in essence just connected bda_video_out_of_mpeg_demuxer_pin with capture_filter->capture_pin no real need for RenderStream
 
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not RenderStream to connect pins\n");
