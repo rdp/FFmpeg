@@ -1633,6 +1633,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "success infinite tee to graph.\n");
 
 
+
         r = CoCreateInstance(&CLSID_MPEG2Demultiplexer, NULL, CLSCTX_INPROC_SERVER,
                              &IID_IBaseFilter, (void **) &bda_mpeg2_demux);
         if (r != S_OK) {
@@ -1646,14 +1647,14 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "3"); // TODO fix me!
+        // this does a double connect I believe, to setup the demux all the way to "VideoDevice"
+        r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "3"); // TODO fix me! 003 also
         if (r != S_OK) {
-            r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "003"); // this doesn't work! and 001
-            if (r != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux, tried twice! .\n");
-                goto error;
-            }
+            av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux, tried twice! .\n");
+            goto error;
         }
+
+
 
         //add DBA MPEG2 Transport information filter
 
@@ -1937,36 +1938,6 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         ///////
         ////////////////////////////////////////////
-
-
-        ////dshow_show_filter_properties(bda_net_provider, avctx);
-
-
-        ///add decoder
-
-//        r = CoCreateInstance(&CLSID_MS_DTV_DVD_Decoder, NULL, CLSCTX_INPROC_SERVER,
-//                             &IID_IBaseFilter, (void **) &ms_dtv_dec);
-//        if (r != S_OK) {
-//            av_log(avctx, AV_LOG_ERROR, "Could not create dtv decoder\n");
-//            goto error;
-//        }
-//
-//
-//        r = IGraphBuilder_AddFilter(graph, ms_dtv_dec, NULL);
-//        if (r != S_OK) {
-//            av_log(avctx, AV_LOG_ERROR, "Could not add dtv decoder to graph.\n");
-//            goto error;
-//        }
-//
-//        r = dshow_connect_bda_pins(avctx, bda_mpeg2_demux, "003", ms_dtv_dec, "Input", &bda_src, "Output");
-//        if (r != S_OK) {
-//            av_log(avctx, AV_LOG_ERROR, "Could not connect mpeg2 demux to dtv decoder.\n");
-//            goto error;
-//        }
-
-        //ctx->device_filter[VideoDevice]=ms_dtv_dec;
-        //ctx->device_filter[VideoDevice]=bda_mpeg2_demux;
-        ///add capture filter
 
         capture_filter = libAVFilter_Create(avctx, callback, VideoDevice);
         if (!capture_filter) {
