@@ -1343,6 +1343,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         IBaseFilter *bda_net_provider = NULL;
         IBaseFilter *bda_source_device = NULL;
         IBaseFilter *bda_receiver_device = NULL;
+        IBaseFilter *bda_filter_supplying_mpeg = NULL;
         IBaseFilter *bda_infinite_tee = NULL;
         IBaseFilter *bda_mpeg2_demux = NULL;
         IBaseFilter *bda_mpeg2_info = NULL;
@@ -1544,7 +1545,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        ctx->device_filter[VideoDevice] = bda_source_device; // temporary save so we can connect it to provider later yikes!
+        bda_filter_supplying_mpeg =  bda_source_device;
 
         r = IGraphBuilder_AddFilter(graph, bda_source_device, NULL);
         if (r != S_OK) {
@@ -1589,8 +1590,7 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         }
 
-
-        ///---add receive component if present
+        ///---add receive component if requested
         if (ctx->receiver_component) {
 
             // find right named device
@@ -1599,7 +1599,7 @@ static int dshow_read_header(AVFormatContext *avctx)
                 goto error;
             }
 
-            ctx->device_filter[VideoDevice] = bda_receiver_device; // temporary save so we can connect provider to it
+            bda_filter_supplying_mpeg = bda_receiver_device; // temporary save so we can connect provider to it
 
             r = IGraphBuilder_AddFilter(graph, bda_receiver_device, NULL);
             if (r != S_OK) {
@@ -1617,7 +1617,6 @@ static int dshow_read_header(AVFormatContext *avctx)
                 goto error;
             }
         }
-
 
 
         // create infinite tee so we can just grab the MPEG stream -> ffmpeg
@@ -1648,8 +1647,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        // at this point VideoDevice is actually "either tuner" "or the other" yikes
-        r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src_pin, "3"); // TODO fix me! 003 also
+        r = dshow_connect_bda_pins(avctx, bda_filter_supplying_mpeg, NULL, bda_mpeg2_demux, NULL, &bda_src_pin, "3"); // TODO fix me! 003 also
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux, tried twice! .\n");
             goto error;
