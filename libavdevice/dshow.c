@@ -781,6 +781,7 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
         av_log(avctx, AV_LOG_ERROR, "Could not connect pins.\n");
         return AVERROR(EIO);
     }
+    // TODO I think this doesn't disconnect on failure...
 
     ///find output pin
     if (ext_pin != NULL) {
@@ -1362,7 +1363,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         IATSCLocator *atsc_locator = NULL;
         GUID CLSIDNetworkType = GUID_NULL;
         GUID tuning_space_network_type = GUID_NULL;
-        IPin *bda_src = NULL;
+        IPin *bda_src_pin = NULL;
         ICaptureGraphBuilder2 *graph_builder2 = NULL;
 
 
@@ -1543,7 +1544,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        ctx->device_filter[VideoDevice] = bda_source_device;
+        ctx->device_filter[VideoDevice] = bda_source_device; // temporary save so we can connect it to provider later yikes!
 
         r = IGraphBuilder_AddFilter(graph, bda_source_device, NULL);
         if (r != S_OK) {
@@ -1592,12 +1593,13 @@ static int dshow_read_header(AVFormatContext *avctx)
         ///---add receive component if present
         if (ctx->receiver_component) {
 
+            // find right named device
             if ((r = dshow_cycle_dtv_devices(avctx, ReceiverComponent, devenum, &bda_receiver_device)) < 0) {
                 ret = r;
                 goto error;
             }
 
-            ctx->device_filter[VideoDevice] = bda_receiver_device;
+            ctx->device_filter[VideoDevice] = bda_receiver_device; // temporary save so we can connect provider to it
 
             r = IGraphBuilder_AddFilter(graph, bda_receiver_device, NULL);
             if (r != S_OK) {
@@ -1617,15 +1619,9 @@ static int dshow_read_header(AVFormatContext *avctx)
         }
 
 
+
         // create infinite tee so we can just grab the MPEG stream -> ffmpeg
         r = CoCreateInstance(&CLSID_InfTee, NULL, CLSCTX_INPROC_SERVER,
-                             &IID_IBaseFilter, (void **) &bda_mpeg2_demux);
-        if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not create BDA mpeg2 demux\n");
-            goto error;
-       }
-
-        r = CoCreateInstance(&CLSID_MPEG2Demultiplexer, NULL, CLSCTX_INPROC_SERVER,
                              &IID_IBaseFilter, (void **) &bda_infinite_tee);
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not create BDA infinite tee\n");
@@ -1639,20 +1635,26 @@ static int dshow_read_header(AVFormatContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "success infinite tee to graph.\n");
 
 
+        r = CoCreateInstance(&CLSID_MPEG2Demultiplexer, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_IBaseFilter, (void **) &bda_mpeg2_demux);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not create BDA mpeg2 demux\n");
+            goto error;
+       }
+
         r = IGraphBuilder_AddFilter(graph, bda_mpeg2_demux, NULL);
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not add BDA mpeg2 demux to graph.\n");
             goto error;
         }
 
-        r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "3"); // TODO fix me!
+        // at this point VideoDevice is actually "either tuner" "or the other" yikes
+        r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src_pin, "3"); // TODO fix me! 003 also
         if (r != S_OK) {
-            r = dshow_connect_bda_pins(avctx, ctx->device_filter[VideoDevice], NULL, bda_mpeg2_demux, NULL, &bda_src, "003"); // this doesn't work! and 001
-            if (r != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux, tried twice! .\n");
-                goto error;
-            }
+            av_log(avctx, AV_LOG_ERROR, "Could not connect tuner/receiver to mpeg2 demux, tried twice! .\n");
+            goto error;
         }
+
 
         //add DBA MPEG2 Transport information filter
 
@@ -1937,36 +1939,6 @@ static int dshow_read_header(AVFormatContext *avctx)
         ///////
         ////////////////////////////////////////////
 
-
-        ////dshow_show_filter_properties(bda_net_provider, avctx);
-
-
-        ///add decoder
-
-//        r = CoCreateInstance(&CLSID_MS_DTV_DVD_Decoder, NULL, CLSCTX_INPROC_SERVER,
-//                             &IID_IBaseFilter, (void **) &ms_dtv_dec);
-//        if (r != S_OK) {
-//            av_log(avctx, AV_LOG_ERROR, "Could not create dtv decoder\n");
-//            goto error;
-//        }
-//
-//
-//        r = IGraphBuilder_AddFilter(graph, ms_dtv_dec, NULL);
-//        if (r != S_OK) {
-//            av_log(avctx, AV_LOG_ERROR, "Could not add dtv decoder to graph.\n");
-//            goto error;
-//        }
-//
-//        r = dshow_connect_bda_pins(avctx, bda_mpeg2_demux, "003", ms_dtv_dec, "Input", &bda_src, "Output");
-//        if (r != S_OK) {
-//            av_log(avctx, AV_LOG_ERROR, "Could not connect mpeg2 demux to dtv decoder.\n");
-//            goto error;
-//        }
-
-        //ctx->device_filter[VideoDevice]=ms_dtv_dec;
-        //ctx->device_filter[VideoDevice]=bda_mpeg2_demux;
-        ///add capture filter
-
         capture_filter = libAVFilter_Create(avctx, callback, VideoDevice);
         if (!capture_filter) {
             av_log(avctx, AV_LOG_ERROR, "Could not create grabber filter.\n");
@@ -1987,7 +1959,7 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         av_log(avctx, AV_LOG_INFO, "Video capture filter added to graph\n");
 
-        if(!bda_src) {
+        if(!bda_src_pin) {
             av_log(avctx, AV_LOG_ERROR, "No output from bda source\n");
             goto error;
         }
@@ -2005,8 +1977,9 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_src, NULL /* no intermediate filter */,
+        r = ICaptureGraphBuilder2_RenderStream(graph_builder2, NULL, NULL, (IUnknown *) bda_src_pin, NULL /* no intermediate filter */,
             (IBaseFilter *) capture_filter); /* connect pins, optionally insert intermediate filters like crossbar if necessary */
+       // this in essence just connected bda_src_pin with capture_filter->capture_pin 
 
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not RenderStream to connect pins\n");
@@ -2036,7 +2009,6 @@ static int dshow_read_header(AVFormatContext *avctx)
                 goto error;
             }
 
-
             r = IStorage_CreateStream(p_storage, wszStreamName, STGM_WRITE | STGM_CREATE | STGM_SHARE_EXCLUSIVE, 0, 0, &ofile_stream);
             if (r != S_OK) {
                 av_log(avctx, AV_LOG_ERROR, "Creating IStream failed.\n");
@@ -2060,7 +2032,7 @@ static int dshow_read_header(AVFormatContext *avctx)
 
 
             //if (SUCCEEDED(r)) {
-                r = IStorage_Commit(p_storage, STGC_DEFAULT);       /// for some reason, it does not save if check properly
+                r = IStorage_Commit(p_storage, STGC_DEFAULT);       /// for some reason, it does not save if checked properly
             //}
 //            if (r != S_OK) {
 //                av_log(avctx, AV_LOG_ERROR, "Could not save capture dtv graph \n");
