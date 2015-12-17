@@ -1617,15 +1617,9 @@ static int dshow_read_header(AVFormatContext *avctx)
         }
 
 
+
         // create infinite tee so we can just grab the MPEG stream -> ffmpeg
         r = CoCreateInstance(&CLSID_InfTee, NULL, CLSCTX_INPROC_SERVER,
-                             &IID_IBaseFilter, (void **) &bda_mpeg2_demux);
-        if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not create BDA mpeg2 demux\n");
-            goto error;
-       }
-
-        r = CoCreateInstance(&CLSID_MPEG2Demultiplexer, NULL, CLSCTX_INPROC_SERVER,
                              &IID_IBaseFilter, (void **) &bda_infinite_tee);
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not create BDA infinite tee\n");
@@ -1638,6 +1632,13 @@ static int dshow_read_header(AVFormatContext *avctx)
         }
         av_log(avctx, AV_LOG_ERROR, "success infinite tee to graph.\n");
 
+
+        r = CoCreateInstance(&CLSID_MPEG2Demultiplexer, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_IBaseFilter, (void **) &bda_mpeg2_demux);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not create BDA mpeg2 demux\n");
+            goto error;
+       }
 
         r = IGraphBuilder_AddFilter(graph, bda_mpeg2_demux, NULL);
         if (r != S_OK) {
