@@ -1,0 +1,1 @@
+c:\Users\rdp\Downloads\ffplay.exe -debug 1 -loglevel debug -f dshow -receiver_component "Hauppauge WinTV 885 TS Capture" -tune_freq 651250 -dtv 4 -dump_dtv_graph dump.grf -i video="Hauppauge WinTV 885 BDA Tuner/Demod" 

@@ -1,0 +1,2 @@
+del myfile 
+c:\Users\rdp\Downloads\ffmpeg.exe -analyzeduration 1G -probesize 1G -debug 1 -loglevel debug -f dshow -receiver_component "Hauppauge WinTV 885 TS Capture" -tune_freq 651250 -dtv 4 -dump_dtv_graph dump.grf -rtbufsize 1G  -t 6 -i video="Hauppauge WinTV 885 BDA Tuner/Demod" -t 7 -y long.mp4
