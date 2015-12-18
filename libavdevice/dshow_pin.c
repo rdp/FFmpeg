@@ -301,10 +301,7 @@ libAVMemInputPin_GetAllocatorRequirements(libAVMemInputPin *this,
     dshowdebug("libAVMemInputPin_GetAllocatorRequirements(%p)\n", this);
     return E_NOTIMPL;
 }
-
 FILE *pFile2 = NULL;
-uint8_t *savedBytes = NULL;
-int savedBytesSize = 0;
 
 long WINAPI
 libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
@@ -326,7 +323,6 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     IReferenceClock *clock = pin->filter->clock;
     REFERENCE_TIME dummy;
     struct dshow_ctx *ctx;
-    int oldBytesSize;
 
     dshowdebug("libAVMemInputPin_Receive(%p)\n", this);
 
@@ -369,30 +365,16 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     ctx = s->priv_data;
     index = pin->filter->stream_index;
 
+    av_log(NULL, AV_LOG_VERBOSE, "dshow passing through packet of type %s size %8d "
+        "timestamp %lld orig timestamp %lld graph timestamp %lld diff %lld %s\n",
+        devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, ctx->device_name[devtype]);
+    pin->filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
     if (!pFile2)
        pFile2 = fopen("myfile", "ab");
 
     fwrite(buf, 1, buf_size, pFile2);
     //fclose(pFile2);
-         av_log(NULL, AV_LOG_VERBOSE, "dshow passing through packet of type %s size %8d "
-            "timestamp %lld orig timestamp %lld graph timestamp %lld diff %lld %s\n",
-            devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, ctx->device_name[devtype]);
 
-    if (IMediaSample_IsSyncPoint(sample)) {
-      // flush, basically
-      if (savedBytes != NULL)  {
-            av_log(NULL, AV_LOG_VERBOSE, "passing real packet through, size %d time %lld\n", savedBytesSize, curtime); 
-            pin->filter->callback(priv_data, index, savedBytes, savedBytesSize, curtime, devtype);
-      }
-      savedBytesSize = 0; // realloc should free our previous buffer for us
-    }
-
-    savedBytes = av_realloc(savedBytes, savedBytesSize + buf_size);
-    for(index = 0; index < buf_size; index++) {
-      savedBytes[savedBytesSize + index] = buf[index]; // todo use memcpy instead
-    }
-    savedBytesSize += buf_size;
-    
     return S_OK;
 }
 long WINAPI
@@ -400,7 +382,7 @@ libAVMemInputPin_ReceiveMultiple(libAVMemInputPin *this,
                                  IMediaSample **samples, long n, long *nproc)
 {
     int i;
-    dshowdebug("libAVMemInputPin_ReceiveMultiple(%p) %d \n", this, n);
+    dshowdebug("libAVMemInputPin_ReceiveMultiple(%p)\n", this);
 
     for (i = 0; i < n; i++)
         libAVMemInputPin_Receive(this, samples[i]);
