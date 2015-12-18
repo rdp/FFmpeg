@@ -56,6 +56,10 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
        // stream is from BDA TV old way :|
         if ( (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video)) && !IsEqualGUID(&type->majortype, &MEDIATYPE_Stream) )
             return VFW_E_TYPE_NOT_ACCEPTED;
+        if (IsEqualGUID(&type->formattype, &FORMAT_MPEG2_VIDEO)) {
+            return VFW_E_TYPE_NOT_ACCEPTED; // force it to insert some dshow mpeg2 converter in there for us, never could quite get that working
+        }
+
     } else {
         if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio))
             return VFW_E_TYPE_NOT_ACCEPTED;
