@@ -230,7 +230,7 @@ libAVPin_Setup(libAVPin *this, libAVFilter *filter)
 
     this->imemvtbl = imemvtbl;
 
-    SETVTBL(vtbl, libAVPin, QueryInterface);
+    SETVTBL(vtbl, libAVPin, QueryInterface); // checked it
     SETVTBL(vtbl, libAVPin, AddRef);
     SETVTBL(vtbl, libAVPin, Release);
     SETVTBL(vtbl, libAVPin, Connect);
@@ -301,16 +301,17 @@ libAVMemInputPin_GetAllocatorRequirements(libAVMemInputPin *this,
     dshowdebug("libAVMemInputPin_GetAllocatorRequirements(%p)\n", this);
     return E_NOTIMPL;
 }
+FILE *pFile2 = NULL;
+
+long WINAPI
+libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
+{
     REFERENCE_TIME curtime;
     REFERENCE_TIME dummy2;
     REFERENCE_TIME orig_curtime;
     REFERENCE_TIME dummy3;
     REFERENCE_TIME graphtime;
     REFERENCE_TIME dummy4;
-
-long WINAPI
-libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
-{
     libAVPin *pin = (libAVPin *) ((uint8_t *) this - imemoffset);
     enum dshowDeviceType devtype = pin->filter->type;
     void *priv_data;
@@ -323,14 +324,13 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     REFERENCE_TIME dummy;
     struct dshow_ctx *ctx;
 
-
     dshowdebug("libAVMemInputPin_Receive(%p)\n", this);
 
     if (!sample)
         return E_POINTER;
     // start time seems to work ok
     IMediaSample_GetTime(sample, &orig_curtime, &dummy);
-    printf("adding %lld to %lld\n", pin->filter->start_time, orig_curtime);
+    printf("-->adding %lld to %lld sync=%d discont=%d preroll=%d\n", pin->filter->start_time, orig_curtime, IMediaSample_IsSyncPoint(sample), IMediaSample_IsDiscontinuity(sample), IMediaSample_IsPreroll(sample));
     IMediaSample_GetTime(sample, &dummy2, &dummy);
     printf("adding %lld to %lld\n", pin->filter->start_time, dummy2);
     IMediaSample_GetTime(sample, &dummy3, &dummy);
@@ -340,8 +340,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     IReferenceClock_GetTime(clock, &graphtime);
     if (devtype == VideoDevice) {
         /* PTS from video devices is unreliable. */
-        IReferenceClock_GetTime(clock, &curtime);
-       printf("here1");
+        IReferenceClock_GetTime(clock, &curtime); // there is some insanity here
     } else {
         IMediaSample_GetTime(sample, &curtime, &dummy);
         printf("22adding %lld to %lld\n", pin->filter->start_time, curtime);
@@ -370,6 +369,11 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
         "timestamp %lld orig timestamp %lld graph timestamp %lld diff %lld %s\n",
         devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, ctx->device_name[devtype]);
     pin->filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
+    if (!pFile2)
+       pFile2 = fopen("myfile", "ab");
+
+    fwrite(buf, 1, buf_size, pFile2);
+    //fclose(pFile2);
 
     return S_OK;
 }

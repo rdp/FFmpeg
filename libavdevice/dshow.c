@@ -1177,7 +1177,7 @@ dshow_add_device(AVFormatContext *avctx,
           VIDEOINFOHEADER2 *v = (void *) &mpeg_video_info->hdr;
           time_base = (AVRational) { v->AvgTimePerFrame, 10000000 };
           bih = &v->bmiHeader;
-          is_mpeg = 1;
+          is_mpeg = 1; // NB this has biWidth set but its actually "wrong" or "could be overriden" or the like <sigh>
         }
         if (!bih) {
             av_log(avctx, AV_LOG_ERROR, "Could not get media type.\n");
