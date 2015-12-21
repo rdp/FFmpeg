@@ -163,7 +163,6 @@ void ff_print_AM_MEDIA_TYPE(const AM_MEDIA_TYPE *type)
         if (IsEqualGUID(&type->formattype, &FORMAT_MPEG2_VIDEO)) {
           MPEG2VIDEOINFO *mpeg_video_info = (void *) type->pbFormat;
           v = (void *) &mpeg_video_info->hdr;
-          printf("type addr %d mpeg2 addr %d\n", type, mpeg_video_info);
         } else
            v = (void *) type->pbFormat;
 

@@ -69,6 +69,7 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
     this->connectedto = pin;
 
     ff_copy_dshow_media_type(&this->type, type);
+    dshowdebug("accepted connection at pin\n");
 
     return S_OK;
 }
@@ -103,13 +104,14 @@ libAVPin_ConnectedTo(libAVPin *this, IPin **pin)
 long WINAPI
 libAVPin_ConnectionMediaType(libAVPin *this, AM_MEDIA_TYPE *type)
 {
+    // they want a copy of our current media type...
     dshowdebug("libAVPin_ConnectionMediaType(%p)\n", this);
 
     if (!type)
         return E_POINTER;
     if (!this->connectedto)
         return VFW_E_NOT_CONNECTED;
-
+    
     return ff_copy_dshow_media_type(type, &this->type);
 }
 long WINAPI
@@ -153,7 +155,7 @@ libAVPin_QueryId(libAVPin *this, wchar_t **id)
 long WINAPI
 libAVPin_QueryAccept(libAVPin *this, const AM_MEDIA_TYPE *type)
 {
-    dshowdebug("libAVPin_QueryAccept(%p)\n", this);
+    dshowdebug("libAVPin_QueryAccept new media type (%p)\n", this);
     return S_FALSE;
 }
 long WINAPI
