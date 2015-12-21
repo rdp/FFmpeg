@@ -1,5 +1,9 @@
  # slightly faster than ffmpeg_g.exe with a copy
 rm ffmpeg.exe
 rm /Volumes/Users/rdp/Downloads/ffmpeg.exe
-make ffmpeg.exe -j 8 && echo 'copying' && cp ffmpeg.exe /Volumes/Users/rdp/Downloads/ffmpeg.exe.tmp
-mv /Volumes/Users/rdp/Downloads/ffmpeg.exe.tmp /Volumes/Users/rdp/Downloads/ffmpeg.exe # complete so done don't want poller on the receiving side to use it till complete 
+make ffmpeg.exe -j 8 
+rm -rf ffmpeg.exe.gz
+gzip ffmpeg.exe
+echo 'copying' 
+cp ffmpeg.exe.gz /Volumes/Users/rdp/Downloads/ffmpeg.exe.gz.tmp
+mv /Volumes/Users/rdp/Downloads/ffmpeg.exe.gz.tmp /Volumes/Users/rdp/Downloads/ffmpeg.exe.gz # complete so done don't want poller on the receiving side to use it till complete 
