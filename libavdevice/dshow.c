@@ -1180,12 +1180,10 @@ dshow_add_device(AVFormatContext *avctx,
           //AVMEDIA_TYPE_VIDEO AV_CODEC_ID_MPEG2VIDEO
           is_mpeg = 1; // NB this has biWidth set but its actually "wrong" or "could be overriden" or the like <sigh>
         } else if (IsEqualGUID(&type.subtype, &KSDATAFORMAT_SUBTYPE_BDA_MPEG2_TRANSPORT_LOCAL)) {
-            //avpriv_set_pts_info(st, 60, 1, 27000000);
-            //codec->codec_id = AV_CODEC_ID_MPEG2TS;
-            //codec->codec_type = AVMEDIA_TYPE_DATA;
+            // get here if using infinite tee
             avpriv_set_pts_info(st, 60, 1, 27000000);
-            codec->codec_id = AV_CODEC_ID_MPEG2VIDEO;
-            codec->codec_type = AVMEDIA_TYPE_VIDEO;
+            codec->codec_id = AV_CODEC_ID_MPEG2TS; // the magic one it doesn't understand
+            codec->codec_type = AVMEDIA_TYPE_DATA;
             goto done;
         } 
         if (!bih) {
@@ -1339,7 +1337,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         GUID tuning_space_network_type = GUID_NULL;
         IPin *bda_mpeg_video_pin = NULL;
         ICaptureGraphBuilder2 *graph_builder2 = NULL;
-
+        int use_infinite_tee_ts_stream = 0;
 
         const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
 
@@ -1626,17 +1624,21 @@ static int dshow_read_header(AVFormatContext *avctx)
             av_log(avctx, AV_LOG_ERROR, "Could not add BDA mpeg2 demux to graph.\n");
             goto error;
         }
-        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, NULL, NULL); // TODO fix me! 003 also '3"
-//        r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_mpeg_video_pin, "3"); // TODO fix me! 003 also
+        if (use_infinite_tee_ts_stream)
+          r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, NULL, NULL); // TODO fix me! 003 also '3"
+        else
+          r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_mpeg_video_pin, "3"); // TODO fix me! 003 also
         if (r != S_OK) {
             goto error;
         }
 
 
         // after this point the infinite tee will now have an "Output2" named pin
-        r = dshow_lookup_pin(avctx, bda_infinite_tee, PINDIR_OUTPUT, &bda_mpeg_video_pin, "Output2", "split mpeg tee pin");
-        if (r != S_OK) {
+        if (use_infinite_tee_ts_stream) {
+          r = dshow_lookup_pin(avctx, bda_infinite_tee, PINDIR_OUTPUT, &bda_mpeg_video_pin, "Output2", "split mpeg tee pin");
+          if (r != S_OK) {
             goto error;
+          }
         }
 
         //add DBA MPEG2 Transport information filter
