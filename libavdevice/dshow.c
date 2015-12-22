@@ -32,6 +32,7 @@
 #include "tuner.h"
 #include "bdadefs.h"
 #include "libavformat/url.h"
+#include "libavutil/avstring.h" // avstrstart
 
 static const CLSID CLSID_NetworkProvider =
     {0xB2F3A67C,0x29DA,0x4C78,{0x88,0x31,0x09,0x1E,0xD5,0x09,0xA4,0x75}};
@@ -2324,12 +2325,36 @@ AVInputFormat ff_dshow_demuxer = {
 };
 
 
+static int dshow_url_open(URLContext *h, const char *filename, int flags)
+{
+    struct dshow_ctx *s = h->priv_data;
+    int ret;
+
+    av_log(h, AV_LOG_INFO, "got filename %s flags %x\n", filename, flags);
+    av_strstart(filename, "unix:", &filename);
+    return 0; // 0 == success
+}
+
+static int dshow_url_read(URLContext *h, uint8_t *buf, int size) 
+{
+    struct dshow_ctx *s = h->priv_data;
+    int ret;
+    return -1;
+}
+
+static int dshow_url_close(URLContext *h)
+{
+    struct dshow_ctx *s = h->priv_data;
+    int ret;
+    return -1;
+}
+
 URLProtocol ff_dshow_protocol = {
-    .name                = "dshow_url",
-    .url_open            = NULL,
-    .url_read            = NULL,
-    .url_write           = NULL,
-    .url_close           = NULL,
+    .name                = "dshowbda",
+    .url_open            = dshow_url_open,
+    .url_read            = dshow_url_read,
+    .url_write           = NULL, // none yet
+    .url_close           = dshow_url_close,
     .priv_data_size      = sizeof(struct dshow_ctx),
     .priv_data_class     = &dshow_class,
     .flags               = 0, // doesn't use network, no nested naming schema
