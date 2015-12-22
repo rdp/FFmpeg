@@ -31,6 +31,7 @@
 #include "shlwapi.h"
 #include "tuner.h"
 #include "bdadefs.h"
+#include "libavformat/url.h"
 
 static const CLSID CLSID_NetworkProvider =
     {0xB2F3A67C,0x29DA,0x4C78,{0x88,0x31,0x09,0x1E,0xD5,0x09,0xA4,0x75}};
@@ -75,7 +76,7 @@ static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
     }
     out = avpriv_find_pix_fmt(avpriv_get_raw_pix_fmt_tags(), biCompression); // all others
     if (out == AV_PIX_FMT_NONE)
-      av_log(NULL, AV_LOG_ERROR, "unable to determine pixel format? %d %d\n", biCompression, biBitCount);
+      av_log(NULL, AV_LOG_ERROR, "unable to determine pixel format? %ld %d\n", biCompression, biBitCount);
     return out;
 }
 
@@ -2321,3 +2322,16 @@ AVInputFormat ff_dshow_demuxer = {
     .flags          = AVFMT_NOFILE,
     .priv_class     = &dshow_class,
 };
+
+
+URLProtocol ff_dshow_protocol = {
+    .name                = "dshow_url",
+    .url_open            = NULL,
+    .url_read            = NULL,
+    .url_write           = NULL,
+    .url_close           = NULL,
+    .priv_data_size      = sizeof(struct dshow_ctx),
+    .priv_data_class     = &dshow_class,
+    .flags               = 0, // doesn't use network, no nested naming schema
+};
+
