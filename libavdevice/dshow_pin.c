@@ -20,7 +20,7 @@
  */
 
 #include "dshow_capture.h"
-
+extern IMemAllocator *random_allocator;
 #include <stddef.h>
 #define imemoffset offsetof(libAVPin, imemvtbl)
 
@@ -50,7 +50,7 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
     }
     if (this->connectedto){
         if (this->connectedto == pin) {
-          int accept_and_hang = 0; // hangs with poweredvd installed, doesn't affect ffdshow...hangs LAV filter
+          int accept_and_hang = 1; // hangs with poweredvd installed, doesn't affect ffdshow...hangs LAV filter
           // assume its a "graph type changed right at startup" (digital TV <cough>) which is OK
           if (accept_and_hang) {
             dshowdebug("accepting new type from upstream pin\n");
@@ -181,7 +181,7 @@ libAVPin_QueryId(libAVPin *this, wchar_t **id)
 long WINAPI
 libAVPin_QueryAccept(libAVPin *this, const AM_MEDIA_TYPE *type)
 {
-    int accept = 0;
+    int accept = 1;
     int ret;
     if (accept)  {
       dshowdebug("libAVPin_QueryAccept telling them we accept of new media offering (%p)\n", this);
@@ -325,6 +325,11 @@ libAVMemInputPin_Release(libAVMemInputPin *this)
 long WINAPI
 libAVMemInputPin_GetAllocator(libAVMemInputPin *this, IMemAllocator **alloc)
 {
+    if (random_allocator) {
+       *alloc = random_allocator; 
+    dshowdebug("libAVMemInputPin_GetAllocator returning random (%p)\n", this);
+    return S_OK;
+   }
     dshowdebug("libAVMemInputPin_GetAllocator returning we have none (%p)\n", this);
     return VFW_E_NO_ALLOCATOR;
 }
@@ -365,7 +370,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     REFERENCE_TIME dummy;
     struct dshow_ctx *ctx;
 
-    dshowdebug("libAVMemInputPin_Receive(%p)\n", this);
+    dshowdebug("\n\n\n\n\n\n\n\n\nlibAVMemInputPin_Receive(%p)\n", this);
 
     if (!sample)
         return E_POINTER;
