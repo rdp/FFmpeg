@@ -1,3 +1,2 @@
-rm ffmpeg*exe
-make ffmpeg_g.exe -j 8
-wine ./ffmpeg_g.exe -i dshowbda://abc
+make ffmpeg_g.exe -j 8 || rm ffmpeg*exe
+wine ./ffmpeg_g.exe -loglevel debug -receiver_component "my awesome receiver comopnent" -i dshowbda:audio=x:video=y

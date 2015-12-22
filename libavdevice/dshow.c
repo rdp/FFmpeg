@@ -1258,9 +1258,8 @@ error:
 static int parse_device_name(AVFormatContext *avctx)
 {
     struct dshow_ctx *ctx = avctx->priv_data;
-    char **device_name = ctx->device_name;
+    char **device_name = ctx->device_name; // device_name array
     char *name = av_strdup(avctx->filename);
-    printf("filename2==%s\n", name);
     char *tmp = name;
     int ret = 1;
     char *type;
@@ -1288,6 +1287,7 @@ static int parse_device_name(AVFormatContext *avctx)
         if (device_name[1])
             device_name[1] = av_strdup(device_name[1]);
     }
+    av_log(avctx, AV_LOG_DEBUG, "parsed names as video=[%s] audio=[%s]\n", device_name[0], device_name[1]);
 
     av_free(name);
     return ret;
@@ -2252,15 +2252,14 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
 
 static int dshow_url_open(URLContext *h, const char *filename, int flags)
 {
-    // flags unknown...
     struct dshow_ctx *s = h->priv_data;
-    int ret;
     if (!(s->protocol_av_format_context = avformat_alloc_context())) // TODO free
      return AVERROR(ENOMEM);
-    av_strstart(filename, "dshowbda:", &filename); // remove prefix
-    av_log(h, AV_LOG_INFO, "got parsed filename %s\n", filename);
+    av_strstart(filename, "dshowbda:", &filename); // remove prefix "dshowbda:"
+    av_log(h, AV_LOG_INFO, "got parsed filename %s\n", filename); // works
     if (filename)
-      av_strlcpy(s->protocol_av_format_context->filename, filename, sizeof(filename));
+      av_strlcpy(&s->protocol_av_format_context->filename, filename, 1024);
+    av_log(h, AV_LOG_INFO, "got parsed filename %s copied = %s\n", filename, s->protocol_av_format_context->filename);
     s->protocol_av_format_context->priv_data = s; // this is a bit circular, but needed to pass through the settings
     return dshow_read_header(s->protocol_av_format_context);
 }
