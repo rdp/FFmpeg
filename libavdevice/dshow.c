@@ -1173,6 +1173,7 @@ dshow_add_device(AVFormatContext *avctx,
             time_base = (AVRational) { v->AvgTimePerFrame, 10000000 };
             bih = &v->bmiHeader;
         } else if (IsEqualGUID(&type.formattype, &FORMAT_MPEG2_VIDEO) && type.cbFormat >= sizeof(MPEG2VIDEOINFO)) {
+          // get here if allowed for in dshow_pin.c
           MPEG2VIDEOINFO *mpeg_video_info = (void *) type.pbFormat;
           VIDEOINFOHEADER2 *v = (void *) &mpeg_video_info->hdr;
           time_base = (AVRational) { v->AvgTimePerFrame, 10000000 };
@@ -1191,8 +1192,6 @@ dshow_add_device(AVFormatContext *avctx,
             ff_printGUID(&type.formattype);
             goto error;
         }
-        printf("bih from it\n");
-        dump_bih(NULL, bih);
 
         codec->time_base  = time_base;
         codec->codec_type = AVMEDIA_TYPE_VIDEO;
@@ -2038,7 +2037,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         }
 
 
-        av_log(avctx, AV_LOG_INFO, "Video capture filter connected\n");
+        av_log(avctx, AV_LOG_INFO, "DTV Video capture filter connected\n");
 
         if ((r = dshow_add_device(avctx, VideoDevice)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "Could not add video device.\n");
@@ -2175,7 +2174,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "Could not duplicate media event handle.\n");
         goto error;
     }
-
+    av_log(avctx, AV_LOG_INFO, "starting/running graph");
     r = IMediaControl_Run(control);
     if (r == S_FALSE) {
         OAFilterState pfs;

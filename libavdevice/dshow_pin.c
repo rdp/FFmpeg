@@ -41,28 +41,41 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
                            const AM_MEDIA_TYPE *type)
 {
     enum dshowDeviceType devtype = this->filter->type;
-    dshowdebug("libAVPin_ReceiveConnection(%p)\n", this);
+    dshowdebug("libAVPin_ReceiveConnection(%p) connectedto(%p)\n", this, this->connectedto);
+    ff_print_AM_MEDIA_TYPE(type);
 
     if (!pin){
         dshowdebug(" no pin (%p)\n", this);
         return E_POINTER;
     }
     if (this->connectedto){
-        dshowdebug(" already connected(%p)\n", this);
-        return VFW_E_ALREADY_CONNECTED;
+        if (this->connectedto == pin) {
+          // assume its a "graph type changed right at startup" (digital TV <cough>) which is OK
+          ff_copy_dshow_media_type(&this->type, type);
+          dshowdebug("accepted new type from pin\n");
+          return S_OK;
+        } else {
+          dshowdebug(" already connected(%p)\n", this);
+          return VFW_E_ALREADY_CONNECTED;
+        }
     }
-    ff_print_AM_MEDIA_TYPE(type);
     if (devtype == VideoDevice) {
-        // stream is from BDA TV infinite pin way :|
-        //if ( (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video)) && !IsEqualGUID(&type->majortype, &MEDIATYPE_Stream) )
-        //    return VFW_E_TYPE_NOT_ACCEPTED;
+        // MEDIATYPE_Stream is from BDA TV infinite tee if enabled
+        if ( (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video)) && !IsEqualGUID(&type->majortype, &MEDIATYPE_Stream) ) {
+            dshowdebug("rejecting none video and non stream stream(%p)\n", this);
+            return VFW_E_TYPE_NOT_ACCEPTED;
+        }
         if (IsEqualGUID(&type->formattype, &FORMAT_MPEG2_VIDEO)) {
-            //return VFW_E_TYPE_NOT_ACCEPTED; // force it to insert some dshow mpeg2 converter in there for us, never could quite get that working
+            dshowdebug("rejecting raw mpeg2 video(%p)\n", this);
+            // return not accepted here to force it to NV12 land or some decoder...i.e. not accept MPEG2VIDEO raw stream
+            return VFW_E_TYPE_NOT_ACCEPTED; // force it to insert some dshow mpeg2 converter in there for us, never could quite get that working
         }
 
     } else {
-        if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio))
+        if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio)) {
+            dshowdebug("rejecting non audio on audio input pin\n");
             return VFW_E_TYPE_NOT_ACCEPTED;
+        }
     }
 
     IPin_AddRef(pin);
@@ -155,8 +168,9 @@ libAVPin_QueryId(libAVPin *this, wchar_t **id)
 long WINAPI
 libAVPin_QueryAccept(libAVPin *this, const AM_MEDIA_TYPE *type)
 {
-    dshowdebug("libAVPin_QueryAccept new media type (%p)\n", this);
-    return S_FALSE;
+    dshowdebug("libAVPin_QueryAccept accepting offer of new media type (%p)\n", this);
+    ff_print_AM_MEDIA_TYPE(type);
+    return S_OK;
 }
 long WINAPI
 libAVPin_EnumMediaTypes(libAVPin *this, IEnumMediaTypes **enumtypes)
