@@ -726,8 +726,6 @@ dshow_lookup_pin(AVFormatContext *avctx, IBaseFilter *filter, PIN_DIRECTION pin_
 
 }
 
-IMemAllocator *random_allocator = 0;
-
 /* dshow_connect_bda_pins connects [source] filter's output pin named [src_pin_name] to [destination] filter's input pin named [dest_pin_name]
  * and provides the [destination] filter's output pin named [lookup_pin_name] to a pin ptr [lookup_pin]
  * pin names and lookup_pin can be NULL if not needed/doesn't care
@@ -740,7 +738,6 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
     IPin *pin_out = NULL;
     IPin *pin_in = NULL;
     int r;
-    IMemInputPin *mem_input_pin;
 
     graph = ctx->graph;
 
@@ -756,17 +753,6 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
     r = dshow_lookup_pin(avctx, destination, PINDIR_INPUT, &pin_in, dest_pin_name, "dest");
     if (r != S_OK) {
         return AVERROR(EIO);
-    }
-    if (random_allocator == NULL) {
-      r = IPin_QueryInterface(pin_in, &IID_IMemInputPin,  (void **) &mem_input_pin);
-      av_log(avctx, AV_LOG_INFO, "here1");
-      if (r == S_OK) {
-        av_log(avctx, AV_LOG_INFO, "here2");
-        r = IMemInputPin_GetAllocator(mem_input_pin, &random_allocator);
-        if (r == S_OK)
-           av_log(avctx, AV_LOG_INFO, "here3");
-
-      }
     }
 
     ///connect pins
@@ -1353,6 +1339,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         int use_infinite_tee_ts_stream = 0;
 
         const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
+
 
         ///create graph
 

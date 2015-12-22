@@ -20,7 +20,7 @@
  */
 
 #include "dshow_capture.h"
-extern IMemAllocator *random_allocator;
+
 #include <stddef.h>
 #define imemoffset offsetof(libAVPin, imemvtbl)
 
@@ -325,11 +325,6 @@ libAVMemInputPin_Release(libAVMemInputPin *this)
 long WINAPI
 libAVMemInputPin_GetAllocator(libAVMemInputPin *this, IMemAllocator **alloc)
 {
-    if (random_allocator) {
-       *alloc = random_allocator; 
-    dshowdebug("libAVMemInputPin_GetAllocator returning random (%p)\n", this);
-    return S_OK;
-   }
     dshowdebug("libAVMemInputPin_GetAllocator returning we have none (%p)\n", this);
     return VFW_E_NO_ALLOCATOR;
 }
@@ -370,7 +365,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     REFERENCE_TIME dummy;
     struct dshow_ctx *ctx;
 
-    dshowdebug("\n\n\n\n\n\n\n\n\nlibAVMemInputPin_Receive(%p)\n", this);
+    dshowdebug("libAVMemInputPin_Receive(%p)\n", this);
 
     if (!sample)
         return E_POINTER;
