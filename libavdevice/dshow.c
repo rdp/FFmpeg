@@ -2252,31 +2252,34 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
 
 static int dshow_url_open(URLContext *h, const char *filename, int flags)
 {
-    struct dshow_ctx *s = h->priv_data;
-    if (!(s->protocol_av_format_context = avformat_alloc_context())) // TODO free
+    struct dshow_ctx *ctx = h->priv_data;
+    if (!(ctx->protocol_av_format_context = avformat_alloc_context()))
      return AVERROR(ENOMEM);
     av_strstart(filename, "dshowbda:", &filename); // remove prefix "dshowbda:"
-    av_log(h, AV_LOG_INFO, "got parsed filename %s\n", filename); // works
     if (filename)
-      av_strlcpy(&s->protocol_av_format_context->filename, filename, 1024);
-    av_log(h, AV_LOG_INFO, "got parsed filename %s copied = %s\n", filename, s->protocol_av_format_context->filename);
-    s->protocol_av_format_context->priv_data = s; // this is a bit circular, but needed to pass through the settings
-    return dshow_read_header(s->protocol_av_format_context);
+      av_strlcpy(ctx->protocol_av_format_context->filename, filename, 1024); // 1024 max
+    // TODO set the context name so logging is better
+    ctx->protocol_av_format_context->priv_data = ctx; // a bit circular, but needed to pass through the settings
+    return dshow_read_header(ctx->protocol_av_format_context);
 }
 
 static int dshow_url_read(URLContext *h, uint8_t *buf, int size) 
 {
-    struct dshow_ctx *s = h->priv_data;
-    int ret;
-    av_log(h, AV_LOG_INFO, "dshow_url_read returning fail\n");
-    return -1;
+    struct dshow_ctx *ctx = h->priv_data;
+    int ret = -1;
+    ctx->protocol_av_format_context->flags = h->flags; // in case useful [?]
+    //ret = dshow_read_packet(ctx->protocol_av_format_context, NULL);
+    av_log(h, AV_LOG_INFO, "dshow_url_read returning %d\n", ret);
+    return ret;
 }
 
 static int dshow_url_close(URLContext *h)
 {
-    struct dshow_ctx *s = h->priv_data;
-    int ret;
-    return -1;
+    struct dshow_ctx *ctx = h->priv_data;
+    int ret = dshow_read_close(ctx->protocol_av_format_context);
+    ctx->protocol_av_format_context->priv_data = NULL; // just in case it would be freed below
+    avformat_free_context(ctx->protocol_av_format_context);
+    return ret;
 }
 
 #define OFFSET(x) offsetof(struct dshow_ctx, x)
@@ -2323,7 +2326,7 @@ static const AVOption options[] = {
     { "audio_device_save", "save audio capture filter device (and properties) to file", OFFSET(audio_filter_save_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "video_device_load", "load video capture filter device (and properties) from file", OFFSET(video_filter_load_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "video_device_save", "save video capture filter device (and properties) to file", OFFSET(video_filter_save_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
-    { "dtv", "use digital tuner instead of analog", OFFSET(dtv), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 4, DEC, "dtv" },
+    { "dtv", "use digital tuner instead of analog", OFFSET(dtv), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 4, DEC, "dtv" }, // NB you can use names here, not just numbers
     { "c", "DVB-C", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "dtv" },
     { "t", "DVB-T", 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, DEC, "dtv" },
     { "s", "DVB-S", 0, AV_OPT_TYPE_CONST, {.i64=3}, 0, 0, DEC, "dtv" },
@@ -2352,7 +2355,6 @@ AVInputFormat ff_dshow_demuxer = {
     .flags          = AVFMT_NOFILE,
     .priv_class     = &dshow_class,
 };
-
 
 
 URLProtocol ff_dshow_protocol = {
