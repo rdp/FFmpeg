@@ -32,7 +32,7 @@ DECLARE_RELEASE(libAVPin)
 long WINAPI
 libAVPin_Connect(libAVPin *this, IPin *pin, const AM_MEDIA_TYPE *type)
 {
-    dshowdebug("libAVPin_Connect(%p, %p, %p)\n", this, pin, type);
+    dshowdebug("libAVPin_Connect returning false(%p, %p, %p)\n", this, pin, type);
     /* Input pins receive connections. */
     return S_FALSE;
 }
@@ -50,12 +50,17 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
     }
     if (this->connectedto){
         if (this->connectedto == pin) {
+          int accept_and_hang = 0; // hangs with poweredvd installed, doesn't affect ffdshow...hangs LAV filter
           // assume its a "graph type changed right at startup" (digital TV <cough>) which is OK
-          ff_copy_dshow_media_type(&this->type, type);
-          dshowdebug("accepted new type from pin\n");
-          return S_OK;
+          if (accept_and_hang) {
+            dshowdebug("accepting new type from upstream pin\n");
+            ff_copy_dshow_media_type(&this->type, type);
+            return S_OK; // XXX URLprotocol here?
+          }
+          dshowdebug("rejecting new type from pin\n");
+          return VFW_E_ALREADY_CONNECTED; 
         } else {
-          dshowdebug(" already connected(%p)\n", this);
+          dshowdebug(" some other non connected??? d(%p)\n", this);
           return VFW_E_ALREADY_CONNECTED;
         }
     }
@@ -91,10 +96,14 @@ libAVPin_Disconnect(libAVPin *this)
 {
     dshowdebug("libAVPin_Disconnect(%p)\n", this);
 
-    if (this->filter->state != State_Stopped)
+    if (this->filter->state != State_Stopped) {
+        dshowdebug("telling it we cannot disconnect when stopped");
         return VFW_E_NOT_STOPPED;
-    if (!this->connectedto)
+    }
+    if (!this->connectedto) {
+        dshowdebug("telling it we cannot disconnect when connected LOL");
         return S_FALSE;
+    }
     IPin_Release(this->connectedto);
     this->connectedto = NULL;
 
@@ -107,8 +116,10 @@ libAVPin_ConnectedTo(libAVPin *this, IPin **pin)
 
     if (!pin)
         return E_POINTER;
-    if (!this->connectedto)
+    if (!this->connectedto) {
+        dshowdebug("telling it we cannot connected toL");
         return VFW_E_NOT_CONNECTED;
+    }
     IPin_AddRef(this->connectedto);
     *pin = this->connectedto;
 
@@ -122,8 +133,10 @@ libAVPin_ConnectionMediaType(libAVPin *this, AM_MEDIA_TYPE *type)
 
     if (!type)
         return E_POINTER;
-    if (!this->connectedto)
-        return VFW_E_NOT_CONNECTED;
+    if (!this->connectedto) {
+       dshowdebug("no con media type not connected");
+       return VFW_E_NOT_CONNECTED;
+    }
     
     return ff_copy_dshow_media_type(type, &this->type);
 }
@@ -168,9 +181,17 @@ libAVPin_QueryId(libAVPin *this, wchar_t **id)
 long WINAPI
 libAVPin_QueryAccept(libAVPin *this, const AM_MEDIA_TYPE *type)
 {
-    dshowdebug("libAVPin_QueryAccept accepting offer of new media type (%p)\n", this);
+    int accept = 0;
+    int ret;
+    if (accept)  {
+      dshowdebug("libAVPin_QueryAccept telling them we accept of new media offering (%p)\n", this);
+      ret = S_OK;
+    } else {
+      dshowdebug("libAVPin_QueryAccept telling them we reject new media offering (%p)\n", this);
+      ret = E_FAIL;
+    }
     ff_print_AM_MEDIA_TYPE(type);
-    return S_OK;
+    return ret;
 }
 long WINAPI
 libAVPin_EnumMediaTypes(libAVPin *this, IEnumMediaTypes **enumtypes)
@@ -192,7 +213,7 @@ long WINAPI
 libAVPin_QueryInternalConnections(libAVPin *this, IPin **pin,
                                   unsigned long *npin)
 {
-    dshowdebug("libAVPin_QueryInternalConnections(%p)\n", this);
+    dshowdebug("libAVPin_QueryInternalConnections we have none (%p)\n", this);
     return E_NOTIMPL;
 }
 long WINAPI
@@ -304,21 +325,21 @@ libAVMemInputPin_Release(libAVMemInputPin *this)
 long WINAPI
 libAVMemInputPin_GetAllocator(libAVMemInputPin *this, IMemAllocator **alloc)
 {
-    dshowdebug("libAVMemInputPin_GetAllocator(%p)\n", this);
+    dshowdebug("libAVMemInputPin_GetAllocator returning we have none (%p)\n", this);
     return VFW_E_NO_ALLOCATOR;
 }
 long WINAPI
 libAVMemInputPin_NotifyAllocator(libAVMemInputPin *this, IMemAllocator *alloc,
                                  BOOL rdwr)
 {
-    dshowdebug("libAVMemInputPin_NotifyAllocator(%p)\n", this);
+    dshowdebug("libAVMemInputPin_NotifyAllocator returning OK (%p)\n", this);
     return S_OK;
 }
 long WINAPI
 libAVMemInputPin_GetAllocatorRequirements(libAVMemInputPin *this,
                                           ALLOCATOR_PROPERTIES *props)
 {
-    dshowdebug("libAVMemInputPin_GetAllocatorRequirements(%p)\n", this);
+    dshowdebug("libAVMemInputPin_GetAllocatorRequirements returning E_NOTIMPL (%p)\n", this);
     return E_NOTIMPL;
 }
 FILE *pFile2 = NULL;
