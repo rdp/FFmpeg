@@ -33,6 +33,7 @@
 #include "bdadefs.h"
 #include "libavformat/url.h"
 #include "libavutil/avstring.h" // avstrstart
+#include "libavutil/avassert.h"
 
 static const CLSID CLSID_NetworkProvider =
     {0xB2F3A67C,0x29DA,0x4C78,{0x88,0x31,0x09,0x1E,0xD5,0x09,0xA4,0x75}};
@@ -202,7 +203,7 @@ callback(void *priv_data, int index, uint8_t *buf, int buf_size, int64_t time, e
     if(!pktl_next)
         goto fail;
 
-    if(av_new_packet(&pktl_next->pkt, buf_size) < 0) {
+    if(av_new_packet(&pktl_next->pkt, buf_size) < 0) { // give this packet a buffer
         av_free(pktl_next);
         goto fail;
     }
@@ -2229,7 +2230,7 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
         WaitForSingleObject(ctx->mutex, INFINITE);
         pktl = ctx->pktl;
         if (pktl) {
-            *pkt = pktl->pkt;
+            *pkt = pktl->pkt; // this *must* just assign a packet...copy its memory or some odd?
             ctx->pktl = ctx->pktl->next;
             av_free(pktl);
             ctx->curbufsize[pkt->stream_index] -= pkt->size;
@@ -2263,13 +2264,27 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
     return dshow_read_header(ctx->protocol_av_format_context);
 }
 
-static int dshow_url_read(URLContext *h, uint8_t *buf, int size) 
+static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size) 
 {
     struct dshow_ctx *ctx = h->priv_data;
+    int packet_size_or_fail;
     int ret = -1;
+    AVPacket pkt;
+
+    av_init_packet(&pkt);
     ctx->protocol_av_format_context->flags = h->flags; // in case useful [?]
-    //ret = dshow_read_packet(ctx->protocol_av_format_context, NULL);
-    av_log(h, AV_LOG_INFO, "dshow_url_read returning %d\n", ret);
+    packet_size_or_fail = dshow_read_packet(ctx->protocol_av_format_context, &pkt);
+    if (packet_size_or_fail > 0) {
+      av_assert0(pkt.stream_index == 0); // should only be coming from one stream ever here...
+      int bytes_to_copy = FFMIN(packet_size_or_fail, max_size);
+      if (bytes_to_copy != packet_size_or_fail)
+        av_log(h, AV_LOG_INFO, "truncating packet\n"); // TODO split up large packets, yep
+      memcpy(buf, pkt.data, bytes_to_copy);
+      ret = bytes_to_copy;
+    } else
+      ret = packet_size_or_fail;
+    av_log(h, AV_LOG_DEBUG, "dshow_url_read returning %d\n", ret);
+    av_free_packet(&pkt); // hopefully not leak...
     return ret;
 }
 

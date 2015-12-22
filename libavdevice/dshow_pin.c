@@ -67,13 +67,13 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
     if (devtype == VideoDevice) {
         // MEDIATYPE_Stream is from BDA TV infinite tee if enabled
         if ( (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video)) && !IsEqualGUID(&type->majortype, &MEDIATYPE_Stream) ) {
-            dshowdebug("rejecting none video and non stream stream(%p)\n", this);
+            dshowdebug("rejecting non video and non stream stream(%p)\n", this);
             return VFW_E_TYPE_NOT_ACCEPTED;
         }
         if (IsEqualGUID(&type->formattype, &FORMAT_MPEG2_VIDEO)) {
             dshowdebug("rejecting raw mpeg2 video(%p)\n", this);
             // return not accepted here to force it to NV12 land or some decoder...i.e. not accept MPEG2VIDEO raw stream
-            return VFW_E_TYPE_NOT_ACCEPTED; // force it to insert some dshow mpeg2 converter in there for us, never could quite get that working
+            //return VFW_E_TYPE_NOT_ACCEPTED; // force it to insert some dshow mpeg2 converter in there for us, never could quite get that working
         }
 
     } else {
@@ -371,11 +371,11 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
         return E_POINTER;
     // start time seems to work ok
     IMediaSample_GetTime(sample, &orig_curtime, &dummy);
-    printf("-->adding %lld to %lld sync=%d discont=%d preroll=%d\n", pin->filter->start_time, orig_curtime, IMediaSample_IsSyncPoint(sample), IMediaSample_IsDiscontinuity(sample), IMediaSample_IsPreroll(sample));
+    av_log(NULL, AV_LOG_DEBUG, "-->adding %lld to %lld sync=%d discont=%d preroll=%d\n", pin->filter->start_time, orig_curtime, IMediaSample_IsSyncPoint(sample), IMediaSample_IsDiscontinuity(sample), IMediaSample_IsPreroll(sample));
     IMediaSample_GetTime(sample, &dummy2, &dummy);
-    printf("adding %lld to %lld\n", pin->filter->start_time, dummy2);
+    av_log(NULL, AV_LOG_DEBUG, "adding %lld to %lld\n", pin->filter->start_time, dummy2);
     IMediaSample_GetTime(sample, &dummy3, &dummy);
-    printf("adding %lld to %lld\n", pin->filter->start_time, dummy3);
+    av_log(NULL, AV_LOG_DEBUG, "adding %lld to %lld\n", pin->filter->start_time, dummy3);
 
     orig_curtime += pin->filter->start_time;
     IReferenceClock_GetTime(clock, &graphtime);
@@ -384,11 +384,9 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
         IReferenceClock_GetTime(clock, &curtime); // there is some insanity here
     } else {
         IMediaSample_GetTime(sample, &curtime, &dummy);
-        printf("22adding %lld to %lld\n", pin->filter->start_time, curtime);
+        av_log(NULL, AV_LOG_DEBUG, "22adding %lld to %lld\n", pin->filter->start_time, curtime);
         curtime += pin->filter->start_time;
-        printf("here2");
         if(curtime > 400000000000000000LL) {
-        printf("heree");
             /* initial frames sometimes start < 0 (shown as a very large number here,
                like 437650244077016960 which FFmpeg doesn't like.
                TODO figure out math. For now just drop them. */
