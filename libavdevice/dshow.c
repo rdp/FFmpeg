@@ -1260,6 +1260,7 @@ static int parse_device_name(AVFormatContext *avctx)
     struct dshow_ctx *ctx = avctx->priv_data;
     char **device_name = ctx->device_name;
     char *name = av_strdup(avctx->filename);
+    printf("filename2==%s\n", name);
     char *tmp = name;
     int ret = 1;
     char *type;
@@ -1341,7 +1342,6 @@ static int dshow_read_header(AVFormatContext *avctx)
         int use_infinite_tee_ts_stream = 0;
 
         const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
-
 
         ///create graph
 
@@ -2250,6 +2250,36 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
     return ctx->eof ? AVERROR(EIO) : pkt->size;
 }
 
+static int dshow_url_open(URLContext *h, const char *filename, int flags)
+{
+    // flags unknown...
+    struct dshow_ctx *s = h->priv_data;
+    int ret;
+    if (!(s->protocol_av_format_context = avformat_alloc_context())) // TODO free
+     return AVERROR(ENOMEM);
+    av_strstart(filename, "dshowbda:", &filename); // remove prefix
+    av_log(h, AV_LOG_INFO, "got parsed filename %s\n", filename);
+    if (filename)
+      av_strlcpy(s->protocol_av_format_context->filename, filename, sizeof(filename));
+    s->protocol_av_format_context->priv_data = s; // this is a bit circular, but needed to pass through the settings
+    return dshow_read_header(s->protocol_av_format_context);
+}
+
+static int dshow_url_read(URLContext *h, uint8_t *buf, int size) 
+{
+    struct dshow_ctx *s = h->priv_data;
+    int ret;
+    av_log(h, AV_LOG_INFO, "dshow_url_read returning fail\n");
+    return -1;
+}
+
+static int dshow_url_close(URLContext *h)
+{
+    struct dshow_ctx *s = h->priv_data;
+    int ret;
+    return -1;
+}
+
 #define OFFSET(x) offsetof(struct dshow_ctx, x)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
@@ -2325,29 +2355,6 @@ AVInputFormat ff_dshow_demuxer = {
 };
 
 
-static int dshow_url_open(URLContext *h, const char *filename, int flags)
-{
-    struct dshow_ctx *s = h->priv_data;
-    int ret;
-
-    av_log(h, AV_LOG_INFO, "got filename %s flags %x\n", filename, flags);
-    av_strstart(filename, "unix:", &filename);
-    return 0; // 0 == success
-}
-
-static int dshow_url_read(URLContext *h, uint8_t *buf, int size) 
-{
-    struct dshow_ctx *s = h->priv_data;
-    int ret;
-    return -1;
-}
-
-static int dshow_url_close(URLContext *h)
-{
-    struct dshow_ctx *s = h->priv_data;
-    int ret;
-    return -1;
-}
 
 URLProtocol ff_dshow_protocol = {
     .name                = "dshowbda",
