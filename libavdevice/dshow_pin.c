@@ -50,7 +50,7 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
     }
     if (this->connectedto){
         if (this->connectedto == pin) {
-          int accept_and_hang = 1; // hangs with poweredvd installed, doesn't affect ffdshow...hangs LAV filter
+          int accept_and_hang = 0; // hangs with poweredvd installed, doesn't affect ffdshow...hangs LAV filter
           // assume its a "graph type changed right at startup" (digital TV <cough>) which is OK
           if (accept_and_hang) {
             dshowdebug("accepting new type from upstream pin\n");
@@ -181,7 +181,7 @@ libAVPin_QueryId(libAVPin *this, wchar_t **id)
 long WINAPI
 libAVPin_QueryAccept(libAVPin *this, const AM_MEDIA_TYPE *type)
 {
-    int accept = 1;
+    int accept = 0;
     int ret;
     if (accept)  {
       dshowdebug("libAVPin_QueryAccept telling them we accept of new media offering (%p)\n", this);

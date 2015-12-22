@@ -1354,7 +1354,6 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
 
-
         ///create graph
 
         r = CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
