@@ -72,7 +72,8 @@ static int swf_probe(AVProbeData *p)
         && p->buf[3] <= 20)
         return AVPROBE_SCORE_MAX / 4 + 1;
 
-    init_get_bits8(&gb, p->buf + 3, p->buf_size - 3);
+    if (init_get_bits8(&gb, p->buf + 3, p->buf_size - 3) < 0)
+        return 0;
 
     skip_bits(&gb, 40);
     len = get_bits(&gb, 5);
@@ -478,7 +479,7 @@ bitmap_end_skip:
             if ((res = av_new_packet(pkt, len)) < 0)
                 return res;
             if (avio_read(pb, pkt->data, 4) != 4) {
-                av_free_packet(pkt);
+                av_packet_unref(pkt);
                 return AVERROR_INVALIDDATA;
             }
             if (AV_RB32(pkt->data) == 0xffd8ffd9 ||
@@ -495,7 +496,7 @@ bitmap_end_skip:
             }
             if (res != pkt->size) {
                 if (res < 0) {
-                    av_free_packet(pkt);
+                    av_packet_unref(pkt);
                     return res;
                 }
                 av_shrink_packet(pkt, res);

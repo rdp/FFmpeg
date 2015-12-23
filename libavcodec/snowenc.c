@@ -1120,8 +1120,9 @@ static void iterative_me(SnowContext *s){
                     do{
                         int newx = block->mx;
                         int newy = block->my;
+                        int dia_size = s->iterative_dia_size ? s->iterative_dia_size : FFMAX(s->avctx->dia_size, 1);
                         dia_change=0;
-                        for(i=0; i<FFMAX(s->avctx->dia_size, 1); i++){
+                        for(i=0; i < dia_size; i++){
                             for(j=0; j<i; j++){
                                 dia_change |= check_block_inter(s, mb_x, mb_y, newx+4*(i-j), newy+(4*j), obmc_edged, &best_rd);
                                 dia_change |= check_block_inter(s, mb_x, mb_y, newx-4*(i-j), newy-(4*j), obmc_edged, &best_rd);
@@ -1546,7 +1547,7 @@ static void calculate_visual_weight(SnowContext *s, Plane *p){
                 }
             }
 
-            b->qlog= (int)(log(352256.0/sqrt(error)) / log(pow(2.0, 1.0/QROOT))+0.5);
+            b->qlog= (int)(QROOT * log2(352256.0/sqrt(error)) + 0.5);
         }
     }
 }
@@ -1556,7 +1557,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 {
     SnowContext *s = avctx->priv_data;
     RangeCoder * const c= &s->c;
-    AVFrame *pic = pict;
+    AVFrame *pic;
     const int width= s->avctx->width;
     const int height= s->avctx->height;
     int level, orientation, plane_index, i, y, ret;
@@ -1583,7 +1584,9 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
     }
     emms_c();
-    s->new_picture = pict;
+    pic = s->input_picture;
+    pic->pict_type = pict->pict_type;
+    pic->quality = pict->quality;
 
     s->m.picture_number= avctx->frame_number;
     if(avctx->flags&AV_CODEC_FLAG_PASS2){
@@ -1610,7 +1613,11 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         s->lambda = 0;
     }//else keep previous frame's qlog until after motion estimation
 
-    if (s->current_picture->data[0] && !(s->avctx->flags&CODEC_FLAG_EMU_EDGE)) {
+    if (s->current_picture->data[0]
+#if FF_API_EMU_EDGE
+        && !(s->avctx->flags&CODEC_FLAG_EMU_EDGE)
+#endif
+        ) {
         int w = s->avctx->width;
         int h = s->avctx->height;
 
@@ -1830,7 +1837,7 @@ redo_frame:
                     }
                 }
             s->avctx->error[plane_index] += error;
-            s->current_picture->error[plane_index] = error;
+            s->encoding_error[plane_index] = error;
         }
 
     }
@@ -1840,8 +1847,8 @@ redo_frame:
     ff_snow_release_buffer(avctx);
 
     s->current_picture->coded_picture_number = avctx->frame_number;
-    s->current_picture->pict_type = pict->pict_type;
-    s->current_picture->quality = pict->quality;
+    s->current_picture->pict_type = pic->pict_type;
+    s->current_picture->quality = pic->quality;
     s->m.frame_bits = 8*(s->c.bytestream - s->c.bytestream_start);
     s->m.p_tex_bits = s->m.frame_bits - s->m.misc_bits - s->m.mv_bits;
     s->m.current_picture.f->display_picture_number =
@@ -1862,9 +1869,15 @@ redo_frame:
     emms_c();
 
     ff_side_data_set_encoder_stats(pkt, s->current_picture->quality,
-                                   s->current_picture->error,
+                                   s->encoding_error,
                                    (s->avctx->flags&AV_CODEC_FLAG_PSNR) ? 4 : 0,
                                    s->current_picture->pict_type);
+
+#if FF_API_ERROR_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
+    memcpy(s->current_picture->error, s->encoding_error, sizeof(s->encoding_error));
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     pkt->size = ff_rac_terminate(c);
     if (s->current_picture->key_frame)
@@ -1891,9 +1904,10 @@ static av_cold int encode_end(AVCodecContext *avctx)
 static const AVOption options[] = {
     FF_MPV_COMMON_OPTS
     { "iter",           NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_ITER }, 0, 0, FF_MPV_OPT_FLAGS, "motion_est" },
-    { "memc_only",      "Only do ME/MC (I frames -> ref, P frame -> ME+MC).",   OFFSET(memc_only), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
-    { "no_bitstream",   "Skip final bitstream writeout.",                    OFFSET(no_bitstream), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
+    { "memc_only",      "Only do ME/MC (I frames -> ref, P frame -> ME+MC).",   OFFSET(memc_only), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+    { "no_bitstream",   "Skip final bitstream writeout.",                    OFFSET(no_bitstream), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     { "intra_penalty",  "Penalty for intra blocks in block decission",      OFFSET(intra_penalty), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE },
+    { "iterative_dia_size",  "Dia size for the iterative ME",          OFFSET(iterative_dia_size), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE },
     { NULL },
 };
 

@@ -1423,8 +1423,7 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             }
             c->width  = bytestream2_get_be32(&bc);
             c->height = bytestream2_get_be32(&bc);
-            if (c->width  < 16 || c->width  > c->orig_width ||
-                c->height < 16 || c->height > c->orig_height) {
+            if (c->width < 16 || c->height < 16) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Invalid frame dimensions %dx%d\n",
                        c->width, c->height);
@@ -1448,7 +1447,7 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             c->tile_height = bytestream2_get_be32(&bc);
             if (c->tile_width <= 0 || c->tile_height <= 0 ||
                 ((c->tile_width | c->tile_height) & 0xF) ||
-                c->tile_width * 4LL * c->tile_height >= INT_MAX
+                c->tile_width * (uint64_t)c->tile_height >= INT_MAX / 4
             ) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Invalid tile dimensions %dx%d\n",
@@ -1580,6 +1579,8 @@ header_fail:
     c->height  = 0;
     c->tiles_x =
     c->tiles_y = 0;
+    c->tile_width =
+    c->tile_height = 0;
     return ret;
 }
 
