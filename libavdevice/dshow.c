@@ -172,13 +172,14 @@ static int shall_we_drop(AVFormatContext *s, int index, enum dshowDeviceType dev
     struct dshow_ctx *ctx = s->priv_data;
     static const uint8_t dropscore[] = {62, 75, 87, 100};
     const int ndropscores = FF_ARRAY_ELEMS(dropscore);
-    unsigned int buffer_fullness = (ctx->curbufsize[index]*100)/s->max_picture_buffer;
+    int buffer_size = FFMAX(s->max_picture_buffer, ctx->local_buffer_size);
+    unsigned int buffer_fullness = (ctx->curbufsize[index]*100)/buffer_size;
     const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
 
     if(dropscore[++ctx->video_frame_num%ndropscores] <= buffer_fullness) {
         av_log(s, AV_LOG_ERROR,
-              "real-time buffer [%s] [%s input] too full or near too full (%d%% of size: %d [rtbufsize parameter])! frame dropped!\n",
-              ctx->device_name[devtype], devtypename, buffer_fullness, s->max_picture_buffer);
+              "real-time buffer [%s] [%s input] too full or near too full (%d%% of size: %d [rtbufsize/local_buffer_size parameter])! frame dropped!\n",
+              ctx->device_name[devtype], devtypename, buffer_fullness, buffer_size);
         return 1;
     }
 
@@ -2251,6 +2252,7 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
     return ctx->eof ? AVERROR(EIO) : pkt->size;
 }
 
+AVInputFormat ff_dshow_demuxer;
 static int dshow_url_open(URLContext *h, const char *filename, int flags)
 {
     struct dshow_ctx *ctx = h->priv_data;
@@ -2258,8 +2260,9 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
      return AVERROR(ENOMEM);
     av_strstart(filename, "dshowbda:", &filename); // remove prefix "dshowbda:"
     if (filename)
-      av_strlcpy(ctx->protocol_av_format_context->filename, filename, 1024); // 1024 max
-    // TODO set the context name so logging is better
+      av_strlcpy(ctx->protocol_av_format_context->filename, filename, 1024); // 1024 max bytes
+    ctx->protocol_av_format_context->iformat = &ff_dshow_demuxer;
+    // XXXX better logging than NULL
     ctx->protocol_av_format_context->priv_data = ctx; // a bit circular, but needed to pass through the settings
     return dshow_read_header(ctx->protocol_av_format_context);
 }
@@ -2271,14 +2274,14 @@ static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size)
     int ret = -1;
     AVPacket pkt;
 
-    av_init_packet(&pkt);
+    av_init_packet(&pkt); // possibly unneeded...
     ctx->protocol_av_format_context->flags = h->flags; // in case useful [?]
     packet_size_or_fail = dshow_read_packet(ctx->protocol_av_format_context, &pkt);
     if (packet_size_or_fail > 0) {
       av_assert0(pkt.stream_index == 0); // should only be coming from one stream ever here...
       int bytes_to_copy = FFMIN(packet_size_or_fail, max_size);
       if (bytes_to_copy != packet_size_or_fail)
-        av_log(h, AV_LOG_INFO, "truncating packet\n"); // TODO split up large packets, yep
+        av_log(h, AV_LOG_INFO, "truncating dshow packet %d > %d\n", packet_size_or_fail, max_size); // TODO split up large packets, return partial?
       memcpy(buf, pkt.data, bytes_to_copy);
       ret = bytes_to_copy;
     } else
@@ -2307,6 +2310,7 @@ static const AVOption options[] = {
     { "sample_size", "set audio sample size", OFFSET(sample_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 16, DEC },
     { "channels", "set number of audio channels, such as 1 or 2", OFFSET(channels), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "audio_buffer_size", "set audio device buffer latency size in milliseconds (default is the device's default)", OFFSET(audio_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "local_buffer_size", "set buffer for cacheing local samples, bytes", OFFSET(local_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "list_devices", "list available devices", OFFSET(list_devices), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, DEC, "list_devices" },
     { "true", "", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "list_devices" },
     { "false", "", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, DEC, "list_devices" },

@@ -300,6 +300,7 @@ struct dshow_ctx {
 
     int   list_options;
     int   list_devices;
+    int   local_buffer_size;
     int   audio_buffer_size;
     int   crossbar_video_input_pin_number;
     int   crossbar_audio_input_pin_number;
