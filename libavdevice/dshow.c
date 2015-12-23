@@ -1341,7 +1341,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         GUID tuning_space_network_type = GUID_NULL;
         IPin *bda_mpeg_video_pin = NULL;
         ICaptureGraphBuilder2 *graph_builder2 = NULL;
-        int use_infinite_tee_ts_stream = 0;
+        int use_infinite_tee_ts_stream = 1; // set to 1 to allow capture of "raw" MPEG TS incoming stream
 
         const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
 
