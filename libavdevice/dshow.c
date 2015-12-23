@@ -293,6 +293,7 @@ dshow_cycle_dtv_devices(AVFormatContext *avctx, enum dshowDtvFilterType devtype,
         friendly_name = dup_wchar_to_utf8(var.bstrVal);
 
         if (pfilter) {
+            av_log(avctx, AV_LOG_DEBUG, "comparing requested %s to device name %s\n", device_name, friendly_name);
             if (strcmp(device_name, friendly_name) && strcmp(device_name, unique_name))
                 goto fail1;
 
@@ -2278,8 +2279,8 @@ static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size)
     ctx->protocol_av_format_context->flags = h->flags; // in case useful [?]
     packet_size_or_fail = dshow_read_packet(ctx->protocol_av_format_context, &pkt);
     if (packet_size_or_fail > 0) {
-      av_assert0(pkt.stream_index == 0); // should only be coming from one stream ever here...
       int bytes_to_copy = FFMIN(packet_size_or_fail, max_size);
+      av_assert0(pkt.stream_index == 0); // should only be coming from one stream ever here...
       if (bytes_to_copy != packet_size_or_fail)
         av_log(h, AV_LOG_INFO, "truncating dshow packet %d > %d\n", packet_size_or_fail, max_size); // TODO split up large packets, return partial?
       memcpy(buf, pkt.data, bytes_to_copy);
