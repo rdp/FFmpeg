@@ -7,3 +7,4 @@ gzip ffmpeg.exe
 echo 'copying' 
 cp ffmpeg.exe.gz /Volumes/Users/rdp/Downloads/ffmpeg.exe.gz.tmp
 mv /Volumes/Users/rdp/Downloads/ffmpeg.exe.gz.tmp /Volumes/Users/rdp/Downloads/ffmpeg.exe.gz # complete so done don't want poller on the receiving side to use it till complete 
+echo 'done'

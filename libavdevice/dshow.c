@@ -1185,11 +1185,18 @@ dshow_add_device(AVFormatContext *avctx,
           bih = &v->bmiHeader;
           //AVMEDIA_TYPE_VIDEO AV_CODEC_ID_MPEG2VIDEO
           is_mpeg = 1; // NB this has biWidth set but its actually "wrong" or "could be overriden" or the like <sigh>
+          av_log(avctx, AV_LOG_ERROR, "got mpeg2video output, which is unsupported currently, ask about it please");
         } else if (IsEqualGUID(&type.subtype, &KSDATAFORMAT_SUBTYPE_BDA_MPEG2_TRANSPORT_LOCAL)) {
             // get here if using infinite tee
             avpriv_set_pts_info(st, 60, 1, 27000000);
-            codec->codec_id = AV_CODEC_ID_MPEG2TS; // the magic one it doesn't understand
+            codec->codec_id = AV_CODEC_ID_MPEG2TS; // the magic one it doesn't understand, but doesn't matter now that we're passing it out as stream
             codec->codec_type = AVMEDIA_TYPE_DATA;
+            // TODO fail here unless we know we're protocol...
+            if (ctx->protocol_av_format_context == NULL) {
+              av_log(avctx, AV_LOG_ERROR, "got raw BDA MPEG2 stream without being in a urlprotocol context, please rerun like dshowbda:video=...");
+              ret = AVERROR(EIO);
+              goto error;
+            }
             goto done;
         } 
         if (!bih) {
