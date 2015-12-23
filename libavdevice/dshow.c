@@ -751,11 +751,11 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
         av_log(avctx, AV_LOG_ERROR, "Missing graph component.\n");
         return AVERROR(EIO);
     }
-    r = dshow_lookup_pin(avctx, source, PINDIR_OUTPUT, &pin_out, src_pin_name, "src");
+    r = dshow_lookup_pin(avctx, source, PINDIR_OUTPUT, &pin_out, src_pin_name, "source filter");
     if (r != S_OK) {
         return AVERROR(EIO);
     }
-    r = dshow_lookup_pin(avctx, destination, PINDIR_INPUT, &pin_in, dest_pin_name, "dest");
+    r = dshow_lookup_pin(avctx, destination, PINDIR_INPUT, &pin_in, dest_pin_name, "dest filter");
     if (r != S_OK) {
         return AVERROR(EIO);
     }
