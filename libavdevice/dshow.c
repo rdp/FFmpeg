@@ -2301,7 +2301,7 @@ static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size)
     bytes_to_copy = FFMIN(bytes_left, max_size);
     if (bytes_to_copy != bytes_left)
         av_log(h, AV_LOG_DEBUG, "passing partial dshow packet %d > %d\n", bytes_left, max_size);
-    memcpy(buf, ctx->protocol_latest_packet->data[ctx->protocol_latest_packet->pos], bytes_to_copy);
+    memcpy(buf, &ctx->protocol_latest_packet->data[ctx->protocol_latest_packet->pos], bytes_to_copy);
     ctx->protocol_latest_packet->pos += bytes_to_copy; 
     av_log(h, AV_LOG_DEBUG, "dshow_url_read returning %d\n", bytes_to_copy);
     return bytes_to_copy;;
