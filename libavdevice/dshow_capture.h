@@ -351,7 +351,8 @@ struct dshow_ctx {
     int sample_size;
     int channels;
 
-     AVFormatContext *protocol_av_format_context;
+    AVFormatContext *protocol_av_format_context;
+    AVPacket *protocol_latest_packet;
 };
 
 /*****************************************************************************

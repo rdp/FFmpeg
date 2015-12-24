@@ -2273,6 +2273,9 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
     if (filename)
       av_strlcpy(ctx->protocol_av_format_context->filename, filename, 1024); // 1024 max bytes
     ctx->protocol_av_format_context->iformat = &ff_dshow_demuxer;
+    ctx->protocol_latest_packet = av_packet_alloc();
+    if (!ctx->protocol_latest_packet)
+      return AVERROR(ENOMEM);
     // XXXX better logging than NULL
     ctx->protocol_av_format_context->priv_data = ctx; // a bit circular, but needed to pass through the settings
     return dshow_read_header(ctx->protocol_av_format_context);
@@ -2298,7 +2301,7 @@ static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size)
     } else
       ret = packet_size_or_fail;
     av_log(h, AV_LOG_DEBUG, "dshow_url_read returning %d\n", ret);
-    av_free_packet(&pkt); // hopefully not leak...
+    av_packet_unref(&pkt); // hopefully not leak...
     return ret;
 }
 
@@ -2308,6 +2311,7 @@ static int dshow_url_close(URLContext *h)
     int ret = dshow_read_close(ctx->protocol_av_format_context);
     ctx->protocol_av_format_context->priv_data = NULL; // just in case it would be freed below
     avformat_free_context(ctx->protocol_av_format_context);
+    av_packet_free(&ctx->protocol_latest_packet);    
     return ret;
 }
 
