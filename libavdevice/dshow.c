@@ -728,7 +728,6 @@ dshow_lookup_pin(AVFormatContext *avctx, IBaseFilter *filter, PIN_DIRECTION pin_
     }
     *discovered_pin = local_discovered_pin;
     return 0; // success
-
 }
 
 /* dshow_connect_bda_pins connects [source] filter's output pin named [src_pin_name] to [destination] filter's input pin named [dest_pin_name]
@@ -753,11 +752,11 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
     }
     r = dshow_lookup_pin(avctx, source, PINDIR_OUTPUT, &pin_out, src_pin_name, "source filter");
     if (r != S_OK) {
-        return AVERROR(EIO);
+        return r;
     }
     r = dshow_lookup_pin(avctx, destination, PINDIR_INPUT, &pin_in, dest_pin_name, "dest filter");
     if (r != S_OK) {
-        return AVERROR(EIO);
+        return r;
     }
 
     ///connect pins
@@ -771,7 +770,7 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
     if (lookup_pin != NULL) {
         r = dshow_lookup_pin(avctx, destination, PINDIR_OUTPUT, lookup_pin, lookup_pin_name, "outgoing pin on destination");
         if (r != S_OK) {
-            return AVERROR(EIO);
+            return r;
         }
     }
 
@@ -1271,7 +1270,7 @@ static int parse_device_name(AVFormatContext *avctx)
     char **device_name = ctx->device_name; // device_name array
     char *name = av_strdup(avctx->filename);
     char *tmp = name;
-    int ret = 1;
+    int ret = 1; // success
     char *type;
 
     while ((type = strtok(tmp, "="))) {
@@ -1290,6 +1289,7 @@ static int parse_device_name(AVFormatContext *avctx)
     }
 
     if (!device_name[0] && !device_name[1]) {
+        av_log(avctx, AV_LOG_ERROR, "Malformed dshow input string [%s], possibly doesn't start with video= or audio=\n", avctx->filename);
         ret = 0;
     } else {
         if (device_name[0])
@@ -1318,7 +1318,6 @@ static int dshow_read_header(AVFormatContext *avctx)
     CoInitialize(0);
 
     if (!ctx->list_devices && !parse_device_name(avctx)) {
-        av_log(avctx, AV_LOG_ERROR, "Malformed dshow input string.\n");
         goto error;
     }
 
@@ -1636,7 +1635,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
         if (use_infinite_tee_ts_stream)
-          r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, NULL, NULL); // TODO fix me! 003 also '3"
+          r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, NULL, NULL);
         else
           r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_mpeg_video_pin, "3"); // TODO fix me! 003 also
         if (r != S_OK) {
@@ -1671,10 +1670,12 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         r = dshow_connect_bda_pins(avctx, bda_mpeg2_demux, "1", bda_mpeg2_info, "IB Input", NULL, NULL);
         if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not connect mpeg2 demux to mpeg2 transport information filter.\n");
-            goto error;
+            r = dshow_connect_bda_pins(avctx, bda_mpeg2_demux, "001", bda_mpeg2_info, "IB Input", NULL, NULL);
+            if (r != S_OK) {
+              av_log(avctx, AV_LOG_ERROR, "Could not connect mpeg2 demux to mpeg2 transport information filter.\n");
+              goto error;
+            }
         }
-
 
         /////////////////////////////////
         ///////////////DTV tuning
@@ -2266,7 +2267,9 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
     struct dshow_ctx *ctx = h->priv_data;
     if (!(ctx->protocol_av_format_context = avformat_alloc_context()))
      return AVERROR(ENOMEM);
+    av_log(h, AV_LOG_INFO, "started as [%s]\n", filename);
     av_strstart(filename, "dshowbda:", &filename); // remove prefix "dshowbda:"
+    av_log(h, AV_LOG_INFO, "ended as [%s]\n", filename);
     if (filename)
       av_strlcpy(ctx->protocol_av_format_context->filename, filename, 1024); // 1024 max bytes
     ctx->protocol_av_format_context->iformat = &ff_dshow_demuxer;
