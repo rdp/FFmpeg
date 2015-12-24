@@ -2267,16 +2267,16 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
     struct dshow_ctx *ctx = h->priv_data;
     if (!(ctx->protocol_av_format_context = avformat_alloc_context()))
      return AVERROR(ENOMEM);
-    av_log(h, AV_LOG_INFO, "started as [%s]\n", filename);
+    ctx->protocol_av_format_context->flags = h->flags; 
+
     av_strstart(filename, "dshowbda:", &filename); // remove prefix "dshowbda:"
-    av_log(h, AV_LOG_INFO, "ended as [%s]\n", filename);
     if (filename)
       av_strlcpy(ctx->protocol_av_format_context->filename, filename, 1024); // 1024 max bytes
     ctx->protocol_av_format_context->iformat = &ff_dshow_demuxer;
     ctx->protocol_latest_packet = av_packet_alloc();
+    ctx->protocol_latest_packet->pos = 0; // default is -1
     if (!ctx->protocol_latest_packet)
       return AVERROR(ENOMEM);
-    // XXXX better logging than NULL
     ctx->protocol_av_format_context->priv_data = ctx; // a bit circular, but needed to pass through the settings
     return dshow_read_header(ctx->protocol_av_format_context);
 }
@@ -2285,24 +2285,26 @@ static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size)
 {
     struct dshow_ctx *ctx = h->priv_data;
     int packet_size_or_fail;
-    int ret = -1;
-    AVPacket pkt;
+    int bytes_to_copy;
+    int bytes_left = ctx->protocol_latest_packet->size - ctx->protocol_latest_packet->pos;
 
-    av_init_packet(&pkt); // possibly unneeded...
-    ctx->protocol_av_format_context->flags = h->flags; // in case useful [?]
-    packet_size_or_fail = dshow_read_packet(ctx->protocol_av_format_context, &pkt);
-    if (packet_size_or_fail > 0) {
-      int bytes_to_copy = FFMIN(packet_size_or_fail, max_size);
-      av_assert0(pkt.stream_index == 0); // should only be coming from one stream ever here...
-      if (bytes_to_copy != packet_size_or_fail)
-        av_log(h, AV_LOG_INFO, "truncating dshow packet %d > %d\n", packet_size_or_fail, max_size); // TODO split up large packets, return partial?
-      memcpy(buf, pkt.data, bytes_to_copy);
-      ret = bytes_to_copy;
-    } else
-      ret = packet_size_or_fail;
-    av_log(h, AV_LOG_DEBUG, "dshow_url_read returning %d\n", ret);
-    av_packet_unref(&pkt); // hopefully not leak...
-    return ret;
+    if (bytes_left == 0) {
+      av_packet_unref(ctx->protocol_latest_packet);
+      packet_size_or_fail = dshow_read_packet(ctx->protocol_av_format_context, ctx->protocol_latest_packet);
+      if (packet_size_or_fail < 0) 
+        return packet_size_or_fail;
+      av_assert0(ctx->protocol_latest_packet->stream_index == 0); // this should be a stream based, so only one stream, so always index 0
+      av_assert0(packet_size_or_fail == ctx->protocol_latest_packet->size); // should match...
+      ctx->protocol_latest_packet->pos = 0; // default is -1
+      bytes_left = ctx->protocol_latest_packet->size - ctx->protocol_latest_packet->pos;
+    }
+    bytes_to_copy = FFMIN(bytes_left, max_size);
+    if (bytes_to_copy != bytes_left)
+        av_log(h, AV_LOG_DEBUG, "passing partial dshow packet %d > %d\n", bytes_left, max_size);
+    memcpy(buf, ctx->protocol_latest_packet->data[ctx->protocol_latest_packet->pos], bytes_to_copy);
+    ctx->protocol_latest_packet->pos += bytes_to_copy; 
+    av_log(h, AV_LOG_DEBUG, "dshow_url_read returning %d\n", bytes_to_copy);
+    return bytes_to_copy;;
 }
 
 static int dshow_url_close(URLContext *h)
@@ -2311,7 +2313,7 @@ static int dshow_url_close(URLContext *h)
     int ret = dshow_read_close(ctx->protocol_av_format_context);
     ctx->protocol_av_format_context->priv_data = NULL; // just in case it would be freed below
     avformat_free_context(ctx->protocol_av_format_context);
-    av_packet_free(&ctx->protocol_latest_packet);    
+    av_packet_free(&ctx->protocol_latest_packet); // free wrapper, also does an unref
     return ret;
 }
 
