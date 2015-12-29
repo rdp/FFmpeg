@@ -352,7 +352,6 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     REFERENCE_TIME orig_curtime;
     REFERENCE_TIME dummy3;
     REFERENCE_TIME graphtime;
-    REFERENCE_TIME dummy4;
     libAVPin *pin = (libAVPin *) ((uint8_t *) this - imemoffset);
     enum dshowDeviceType devtype = pin->filter->type;
     void *priv_data;
@@ -372,7 +371,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     // start time seems to work ok
     IMediaSample_GetTime(sample, &orig_curtime, &dummy);
     if (IMediaSample_IsDiscontinuity(sample))
-      av_log(NULL, AV_LOG_VERBOSE, "discontinuity in incoming directshow sample\n"); // I think sometimes this is bogus
+      av_log(NULL, AV_LOG_VERBOSE, "discontinuity flag in incoming directshow sample\n"); // I think sometimes this is bogus
 
     av_log(NULL, AV_LOG_DEBUG, "-->adding %lld to %lld sync=%d discont=%d preroll=%d\n", pin->filter->start_time, orig_curtime, IMediaSample_IsSyncPoint(sample), IMediaSample_IsDiscontinuity(sample), IMediaSample_IsPreroll(sample));
     IMediaSample_GetTime(sample, &dummy2, &dummy);

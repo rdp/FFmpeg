@@ -2297,13 +2297,14 @@ static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size)
       av_assert0(packet_size_or_fail == ctx->protocol_latest_packet->size); // should match...
       ctx->protocol_latest_packet->pos = 0; // default is -1
       bytes_left = ctx->protocol_latest_packet->size - ctx->protocol_latest_packet->pos;
+      av_log(h, AV_LOG_VERBOSE, "dshow_url_read read packet of size %d\n", ctx->protocol_latest_packet->size);
     }
     bytes_to_copy = FFMIN(bytes_left, max_size);
     if (bytes_to_copy != bytes_left)
         av_log(h, AV_LOG_DEBUG, "passing partial dshow packet %d > %d\n", bytes_left, max_size);
     memcpy(buf, &ctx->protocol_latest_packet->data[ctx->protocol_latest_packet->pos], bytes_to_copy);
     ctx->protocol_latest_packet->pos += bytes_to_copy; 
-    av_log(h, AV_LOG_DEBUG, "dshow_url_read returning %d\n", bytes_to_copy);
+    av_log(h, AV_LOG_VERBOSE, "dshow_url_read returning %d\n", bytes_to_copy);
     return bytes_to_copy;;
 }
 
