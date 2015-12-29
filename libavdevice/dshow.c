@@ -1693,7 +1693,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         }
 
 
-        //// if tuningspace == DVB
+        //// if tuningspace == DVB-X
         if ((ctx->dtv > 0) && (ctx->dtv < 4)) {
 
             r = ITuneRequest_QueryInterface(tune_request, &IID_IDVBTuneRequest, (void **) &dvb_tune_request);
