@@ -1504,13 +1504,13 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         r = IScanningTuner_Validate(scanning_tuner, tune_request);
         if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Error validating dvb tune request: r=0x%8x\n", r);
+            av_log(avctx, AV_LOG_ERROR, "Error validating tune request: r=0x%8x\n", r);
             goto error;
         }
 
         r = IScanningTuner_put_TuneRequest(scanning_tuner, tune_request);
         if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not set dvb tune request\n");
+            av_log(avctx, AV_LOG_ERROR, "Could not set tune request\n");
             goto error;
         }
 
@@ -1526,7 +1526,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             goto error;
         }
 
-        bda_filter_supplying_mpeg =  bda_source_device;
+        bda_filter_supplying_mpeg = bda_source_device;
 
         r = IGraphBuilder_AddFilter(graph, bda_source_device, NULL);
         if (r != S_OK) {
@@ -1641,7 +1641,6 @@ static int dshow_read_header(AVFormatContext *avctx)
         if (r != S_OK) {
             goto error;
         }
-
 
         // after this point the infinite tee will now have an "Output2" named pin
         if (use_infinite_tee_ts_stream) {
@@ -2235,7 +2234,6 @@ static int dshow_check_event_queue(IMediaEvent *media_event)
             ret = -1;
         IMediaEvent_FreeEventParams(media_event, code, p1, p2);
     }
-
     return ret;
 }
 
