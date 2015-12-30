@@ -410,11 +410,12 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
         "timestamp %lld orig timestamp %lld graph timestamp %lld diff %lld %s\n",
         devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, ctx->device_name[devtype]);
     pin->filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
-    if (!pFile2)
-       pFile2 = fopen("myfile", "ab");
+    //if (!pFile2)
+    //   pFile2 = fopen("myfile", "ab");
 
-    fwrite(buf, 1, buf_size, pFile2);
-    //fclose(pFile2);
+    //fwrite(buf, 1, buf_size, pFile2);
+    // we don't close it anymore ever: 
+    ////fclose(pFile2);
 
     return S_OK;
 }
