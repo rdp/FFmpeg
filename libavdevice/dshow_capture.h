@@ -319,7 +319,8 @@ struct dshow_ctx {
     int   dtv;
     char *receiver_component;
     char *dtv_graph_file;
-    long   tune_freq;
+    long  tune_freq;
+    int   dvbt_tune_bandwidth_mhz;
 
     IBaseFilter *device_filter[2];
     IPin        *device_pin[2];
