@@ -57,7 +57,7 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
         if ( (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video)) && !IsEqualGUID(&type->majortype, &MEDIATYPE_Stream) )
             return VFW_E_TYPE_NOT_ACCEPTED;
         if (IsEqualGUID(&type->formattype, &FORMAT_MPEG2_VIDEO)) {
-            return VFW_E_TYPE_NOT_ACCEPTED; // force it to insert some dshow mpeg2 converter in there for us, never could quite get that working
+            //return VFW_E_TYPE_NOT_ACCEPTED; // force it to insert some dshow mpeg2 converter in there for us, never could quite get that working
         }
 
     } else {
@@ -334,11 +334,11 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
         return E_POINTER;
     // start time seems to work ok
     IMediaSample_GetTime(sample, &orig_curtime, &dummy);
-    printf("-->adding %lld to %lld sync=%d discont=%d preroll=%d\n", pin->filter->start_time, orig_curtime, IMediaSample_IsSyncPoint(sample), IMediaSample_IsDiscontinuity(sample), IMediaSample_IsPreroll(sample));
+    //printf("-->adding %lld to %lld sync=%d discont=%d preroll=%d\n", pin->filter->start_time, orig_curtime, IMediaSample_IsSyncPoint(sample), IMediaSample_IsDiscontinuity(sample), IMediaSample_IsPreroll(sample));
     IMediaSample_GetTime(sample, &dummy2, &dummy);
-    printf("adding %lld to %lld\n", pin->filter->start_time, dummy2);
+    //printf("adding %lld to %lld\n", pin->filter->start_time, dummy2);
     IMediaSample_GetTime(sample, &dummy3, &dummy);
-    printf("adding %lld to %lld\n", pin->filter->start_time, dummy3);
+    // printf("adding %lld to %lld\n", pin->filter->start_time, dummy3);
 
     orig_curtime += pin->filter->start_time;
     IReferenceClock_GetTime(clock, &graphtime);
