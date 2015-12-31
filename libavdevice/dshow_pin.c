@@ -354,31 +354,26 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     REFERENCE_TIME graphtime;
     libAVPin *pin = (libAVPin *) ((uint8_t *) this - imemoffset);
     enum dshowDeviceType devtype = pin->filter->type;
-    void *priv_data;
-    AVFormatContext *s;
+    void *priv_data = pin->filter->priv_data;
+    AVFormatContext *s = priv_data;
+    struct dshow_ctx *ctx = s->priv_data;
     uint8_t *buf;
     int buf_size; /* todo should be a long? */
     int index;
     const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
     IReferenceClock *clock = pin->filter->clock;
     REFERENCE_TIME dummy;
-    struct dshow_ctx *ctx;
-
+    
     dshowdebug("libAVMemInputPin_Receive(%p)\n", this);
 
     if (!sample)
         return E_POINTER;
     // start time seems to work ok
     IMediaSample_GetTime(sample, &orig_curtime, &dummy);
-    if (IMediaSample_IsDiscontinuity(sample))
-      av_log(NULL, AV_LOG_VERBOSE, "discontinuity flag in incoming directshow sample\n"); // I think sometimes this is bogus
 
-    av_log(NULL, AV_LOG_DEBUG, "-->adding %lld to %lld sync=%d discont=%d preroll=%d\n", pin->filter->start_time, orig_curtime, IMediaSample_IsSyncPoint(sample), IMediaSample_IsDiscontinuity(sample), IMediaSample_IsPreroll(sample));
     IMediaSample_GetTime(sample, &dummy2, &dummy);
-    av_log(NULL, AV_LOG_DEBUG, "adding %lld to %lld\n", pin->filter->start_time, dummy2);
     IMediaSample_GetTime(sample, &dummy3, &dummy);
-    av_log(NULL, AV_LOG_DEBUG, "adding %lld to %lld\n", pin->filter->start_time, dummy3);
-
+    
     orig_curtime += pin->filter->start_time;
     IReferenceClock_GetTime(clock, &graphtime);
     if (devtype == VideoDevice) {
@@ -386,36 +381,26 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
         IReferenceClock_GetTime(clock, &curtime); // there is some insanity here
     } else {
         IMediaSample_GetTime(sample, &curtime, &dummy);
-        av_log(NULL, AV_LOG_DEBUG, "22adding %lld to %lld\n", pin->filter->start_time, curtime);
         curtime += pin->filter->start_time;
         if(curtime > 400000000000000000LL) {
             /* initial frames sometimes start < 0 (shown as a very large number here,
-               like 437650244077016960 which FFmpeg doesn't like.
+               like 437650244077016960 which FFmpeg doesn't like and causes audio only captures to abort.
                TODO figure out math. For now just drop them. */
-            av_log(NULL, AV_LOG_DEBUG,
+            av_log(s, AV_LOG_DEBUG,
                 "dshow dropping initial (or ending) audio frame with odd PTS too high %"PRId64"\n", curtime);
             return S_OK;
         }
-        av_log(NULL, AV_LOG_VERBOSE, "after calculating both same  %lld ==  %lld \n", orig_curtime, curtime );
     }
 
     buf_size = IMediaSample_GetActualDataLength(sample);
     IMediaSample_GetPointer(sample, &buf);
-    priv_data = pin->filter->priv_data;
-    s = priv_data;
-    ctx = s->priv_data;
     index = pin->filter->stream_index;
 
-    av_log(NULL, AV_LOG_DEBUG, "dshow passing through packet of type %s size %8d "
-        "timestamp %lld orig timestamp %lld graph timestamp %lld diff %lld %s\n",
-        devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, ctx->device_name[devtype]);
+    av_log(s, AV_LOG_DEBUG, "dshow passing through packet of type %s size %8d "
+        "timestamp %lld orig timestamp %lld graph timestamp %lld diff %lld discontinuity=%ld %s\n",
+        devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, IMediaSample_IsDiscontinuity(sample),ctx->device_name[devtype]);
+        
     pin->filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
-    //if (!pFile2)
-    //   pFile2 = fopen("myfile", "ab");
-
-    //fwrite(buf, 1, buf_size, pFile2);
-    // we don't close it anymore ever: 
-    ////fclose(pFile2);
 
     return S_OK;
 }
