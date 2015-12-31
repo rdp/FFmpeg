@@ -197,6 +197,12 @@ callback(void *priv_data, int index, uint8_t *buf, int buf_size, int64_t time, e
 
     WaitForSingleObject(ctx->mutex, INFINITE);
 
+    if (ctx->dump_raw_bytes_file) {
+      FILE *outfile = fopen(ctx->dump_raw_bytes_file, "ab"); // append
+      fwrite(buf, 1, buf_size, outfile);
+      fclose(outfile);
+    }
+
     if(shall_we_drop(s, index, devtype))
         goto fail;
 
@@ -2362,6 +2368,7 @@ static const AVOption options[] = {
     { "dvbt_tune_bandwidth_mhz", "specify DVB-T bandwidth (MHz, typically 7 or 8)", OFFSET(dvbt_tune_bandwidth_mhz), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "receiver_component", "BDA receive component filter name", OFFSET(receiver_component), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "dump_dtv_graph", "save dtv graph to file", OFFSET(dtv_graph_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { "dump_raw_bytes_file", "save incoming bytes verbatim to file", OFFSET(dump_raw_bytes_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { NULL },
 };
 
