@@ -2295,7 +2295,7 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
 
 static void dshow_log_signal_strength(AVFormatContext *h) {
   struct dshow_ctx *ctx = h->priv_data;
-  if (ctx->video_frame_num % 30 == 1) {
+  if (ctx->video_frame_num % (30*60) == 0) { // once/min
     long signal_strength;
     int hr;
     hr = ITuner_get_SignalStrength(ctx->scanning_tuner, &signal_strength);

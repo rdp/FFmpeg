@@ -22,7 +22,7 @@
 #ifndef AVDEVICE_DSHOW_H
 #define AVDEVICE_DSHOW_H
 
-#define DSHOWDEBUG 1
+#define DSHOWDEBUG 0
 
 #include "avdevice.h"
 
@@ -49,8 +49,7 @@ void ff_printGUID(const GUID *g);
 void dump_bih(void *s, BITMAPINFOHEADER *bih);
 
 extern const AVClass *ff_dshow_context_class_ptr;
-#define dshowdebug(...) av_log(&ff_dshow_context_class_ptr, AV_LOG_DEBUG, __VA_ARGS__)
-
+#define dshowdebug(...) ff_dlog(&ff_dshow_context_class_ptr, __VA_ARGS__)
 static inline void nothing(void *foo)
 {
 }
