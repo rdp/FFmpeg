@@ -1430,7 +1430,7 @@ static int dshow_read_header(AVFormatContext *avctx)
             av_log(avctx, AV_LOG_ERROR, "Could not query scanning tuner.\n");
             goto error;
         }
-
+        ctx->scanning_tuner = scanning_tuner;
 
         r = IScanningTuner_EnumTuningSpaces(scanning_tuner, &tuning_space_enum);
         if (r != S_OK) {
@@ -2293,6 +2293,19 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
     return dshow_read_header(ctx->protocol_av_format_context);
 }
 
+static void dshow_log_signal_strength(AVFormatContext *h) {
+  struct dshow_ctx *ctx = h->priv_data;
+  if (ctx->video_frame_num % 30 == 1) {
+    long signal_strength;
+    int hr;
+    hr = ITuner_get_SignalStrength(ctx->scanning_tuner, &signal_strength);
+    if (hr == S_OK)
+      av_log(h, AV_LOG_VERBOSE, "signal strength %ld\n", signal_strength);
+    else
+      av_log(h, AV_LOG_DEBUG, "unable to determine signal strength %d\n", hr);
+  }
+}
+
 static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size) 
 {
     struct dshow_ctx *ctx = h->priv_data;
@@ -2317,6 +2330,7 @@ static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size)
     memcpy(buf, &ctx->protocol_latest_packet->data[ctx->protocol_latest_packet->pos], bytes_to_copy);
     ctx->protocol_latest_packet->pos += bytes_to_copy; 
     av_log(h, AV_LOG_VERBOSE, "dshow_url_read returning %d\n", bytes_to_copy);
+    dshow_log_signal_strength(ctx->protocol_av_format_context);
     return bytes_to_copy;;
 }
 
