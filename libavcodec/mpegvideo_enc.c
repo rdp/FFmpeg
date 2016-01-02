@@ -1673,7 +1673,8 @@ static void frame_end(MpegEncContext *s)
 
 #if FF_API_CODED_FRAME
 FF_DISABLE_DEPRECATION_WARNINGS
-    av_frame_copy_props(s->avctx->coded_frame, s->current_picture.f);
+    // disabled for now #4899 av_frame_copy_props(s->avctx->coded_frame, s->current_picture.f);
+    s->avctx->coded_frame = s->current_picture_ptr->f;
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 #if FF_API_ERROR_FRAME
