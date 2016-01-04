@@ -33,8 +33,12 @@
 #include <dshow.h>
 #include <dvdmedia.h>
 
+#ifndef __IScanningTuner_FWD_DEFINED__
+#define __IScanningTuner_FWD_DEFINED__
+typedef struct IScanningTuner IScanningTuner;
+#endif
+
 #include "libavcodec/internal.h"
-#include "bdadefs.h"
 
 /* EC_DEVICE_LOST is not defined in MinGW dshow headers. */
 #ifndef EC_DEVICE_LOST
@@ -359,11 +363,22 @@ struct dshow_ctx {
 };
 
 /*****************************************************************************
- * CrossBar
+ * CrossBar, DTV
  ****************************************************************************/
 HRESULT dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2,
     IBaseFilter *device_filter, enum dshowDeviceType devtype, AVFormatContext *avctx);
 
 void dshow_show_filter_properties(IBaseFilter *pFilter, AVFormatContext *avctx);
+
+HRESULT setup_dshow_dtv(AVFormatContext *avctx, IGraphBuilder *graph);
+
+char *dup_wchar_to_utf8(wchar_t *w);
+
+int dshow_add_device(AVFormatContext *avctx, enum dshowDeviceType devtype);
+
+void
+dshow_frame_callback(void *priv_data, int index, uint8_t *buf, int buf_size, int64_t time, enum dshowDeviceType devtype);
+
+void dshow_log_signal_strength(AVFormatContext *h);
 
 #endif /* AVDEVICE_DSHOW_H */

@@ -156,7 +156,7 @@ dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2,
         hr = S_OK;
         goto end;
     }
-    /* TODO some TV tuners apparently have multiple crossbars? */
+    /* TODO some TV tuners apparently have multiple crossbars? not handled today... */
 
     if (devtype == VideoDevice && ctx->show_video_crossbar_connection_dialog ||
         devtype == AudioDevice && ctx->show_audio_crossbar_connection_dialog) {
