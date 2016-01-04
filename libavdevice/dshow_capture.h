@@ -370,7 +370,7 @@ HRESULT dshow_try_setup_crossbar_options(ICaptureGraphBuilder2 *graph_builder2,
 
 void dshow_show_filter_properties(IBaseFilter *pFilter, AVFormatContext *avctx);
 
-HRESULT setup_dshow_dtv(AVFormatContext *avctx, IGraphBuilder *graph);
+HRESULT setup_dshow_dtv(AVFormatContext *avctx);
 
 char *dup_wchar_to_utf8(wchar_t *w);
 

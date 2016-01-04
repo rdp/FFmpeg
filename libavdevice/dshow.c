@@ -940,7 +940,6 @@ static HRESULT dshow_dump_graph(AVFormatContext *avctx, IGraphBuilder *graph) {
 
             gfilename = malloc((strlen(ctx->dtv_graph_file)+4)*sizeof(WCHAR));
             mbstowcs(gfilename, ctx->dtv_graph_file, strlen(ctx->dtv_graph_file)+4);
-
             r = StgCreateDocfile(gfilename, STGM_CREATE | STGM_TRANSACTED | STGM_READWRITE | STGM_SHARE_EXCLUSIVE,
                     0, &p_storage);
             if (S_OK != r) {
@@ -1179,10 +1178,21 @@ static int dshow_read_header(AVFormatContext *avctx)
         goto error;
     }
 
+    
+
+    r = CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
+                             &IID_IGraphBuilder, (void **) &graph);
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not create capture graph.\n");
+        goto error;
+    }
+    ctx->graph = graph;
+    
     if (ctx->dtv){
-      r = setup_dshow_dtv(avctx, graph);
+      r = setup_dshow_dtv(avctx);
       if (r < 0)
         goto error;
+    
     } else {
         ctx->video_codec_id = avctx->video_codec_id ? avctx->video_codec_id
                                                     : AV_CODEC_ID_RAWVIDEO;
@@ -1201,14 +1211,6 @@ static int dshow_read_header(AVFormatContext *avctx)
                 goto error;
             }
         }
-
-        r = CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
-                             &IID_IGraphBuilder, (void **) &graph);
-        if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not create capture graph.\n");
-            goto error;
-        }
-        ctx->graph = graph;
 
         r = CoCreateInstance(&CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER,
                              &IID_ICreateDevEnum, (void **) &devenum);
@@ -1265,7 +1267,6 @@ static int dshow_read_header(AVFormatContext *avctx)
             ret = AVERROR_EXIT;
             goto error;
         }
-
     }
 
     if (ctx->dtv_graph_file) {
@@ -1273,7 +1274,6 @@ static int dshow_read_header(AVFormatContext *avctx)
       if (ret != S_OK) 
           goto error;
     }
-
     ctx->curbufsize[0] = 0;
     ctx->curbufsize[1] = 0;
     ctx->mutex = CreateMutex(NULL, 0, NULL);
@@ -1313,6 +1313,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "Could not duplicate media event handle.\n");
         goto error;
     }
+
     av_log(avctx, AV_LOG_INFO, "starting/running graph");
     r = IMediaControl_Run(control);
     if (r == S_FALSE) {

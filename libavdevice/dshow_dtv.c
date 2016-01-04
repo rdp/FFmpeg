@@ -46,7 +46,7 @@ dshow_cycle_dtv_devices(AVFormatContext *avctx, enum dshowDtvFilterType devtype,
 static int
 dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *src_pin_name, IBaseFilter *destination, const char *dest_pin_name, IPin **lookup_pin, const char *lookup_pin_name );
 
-HRESULT setup_dshow_dtv(AVFormatContext *avctx, IGraphBuilder *graph) {     
+HRESULT setup_dshow_dtv(AVFormatContext *avctx) {     
         struct dshow_ctx *ctx = avctx->priv_data;
         ICreateDevEnum *devenum = NULL;
         IBaseFilter *bda_net_provider = NULL;
@@ -77,18 +77,9 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx, IGraphBuilder *graph) {
         ICaptureGraphBuilder2 *graph_builder2 = NULL;
         int use_infinite_tee_ts_stream = 1; // set to 1 to allow capture of "raw" MPEG TS incoming stream
         int r;
+        IGraphBuilder *graph = ctx->graph;
 
         const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
-
-        ///create graph
-
-        r = CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
-                             &IID_IGraphBuilder, (void **) &graph);
-        if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not create capture graph.\n");
-            goto error;
-        }
-        ctx->graph = graph;
 
         r = CoCreateInstance(&CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER,
                              &IID_ICreateDevEnum, (void **) &devenum);
