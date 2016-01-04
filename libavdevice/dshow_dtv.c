@@ -716,72 +716,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx, IGraphBuilder *graph) {
         if (graph_builder2 != NULL)
             ICaptureGraphBuilder2_Release(graph_builder2);
 
-        if (ctx->dtv_graph_file) {
-            const WCHAR wszStreamName[] = L"ActiveMovieGraph";
-            IStorage *p_storage = NULL;
-            IStream *ofile_stream = NULL;
-            IPersistStream *pers_stream = NULL;
-            WCHAR *gfilename = NULL;
-
-            gfilename = malloc((strlen(ctx->dtv_graph_file)+4)*sizeof(WCHAR));
-
-            mbstowcs(gfilename, ctx->dtv_graph_file, strlen(ctx->dtv_graph_file)+4);
-
-
-            r = StgCreateDocfile(gfilename, STGM_CREATE | STGM_TRANSACTED | STGM_READWRITE | STGM_SHARE_EXCLUSIVE,
-                    0, &p_storage);
-            if (S_OK != r) {
-                av_log(avctx, AV_LOG_ERROR, "Could not create graph dump file.\n");
-                goto error;
-            }
-
-            r = IStorage_CreateStream(p_storage, wszStreamName, STGM_WRITE | STGM_CREATE | STGM_SHARE_EXCLUSIVE, 0, 0, &ofile_stream);
-            if (r != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Creating IStream failed.\n");
-                goto error;
-            }
-
-            r  = IBaseFilter_QueryInterface(graph, &IID_IPersistStream, (void **) &pers_stream);
-            if (r != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Graph query for IPersistStream failed.\n");
-                goto error;
-            }
-
-            if (!pers_stream) {
-                av_log(avctx, AV_LOG_ERROR, "IPersistStream == NULL.\n");
-                goto error;
-            }
-
-
-            //r = OleSaveToStream(pers_stream, ofile_stream);
-            r = IPersistStream_Save(pers_stream, ofile_stream, TRUE);
-
-
-            //if (SUCCEEDED(r)) {
-                r = IStorage_Commit(p_storage, STGC_DEFAULT);       /// for some reason, it does not save if checked properly
-            //}
-//            if (r != S_OK) {
-//                av_log(avctx, AV_LOG_ERROR, "Could not save capture dtv graph \n");
-//                goto error;
-//            }
-//
-//            r = IStorage_Commit(ofile_stream, STGC_DEFAULT);
-//            if (S_OK != r) {
-//                av_log(avctx, AV_LOG_ERROR, "Could not commit dtv graph data to file.\n");
-//                goto error;
-//            }
-
-            IStream_Release(ofile_stream);
-            IPersistStream_Release(pers_stream);
-
-            IStorage_Release(p_storage);
-
-            free(gfilename);
-
-            av_log(avctx, AV_LOG_INFO, "Graph dump has been saved successfully.\n");
-
-        }
-
         av_log(avctx, AV_LOG_INFO, "DTV Video capture filter connected\n");
 
         if ((r = dshow_add_device(avctx, VideoDevice)) < 0) {
@@ -789,7 +723,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx, IGraphBuilder *graph) {
             goto error;
         }
 
-        // success and error:
 error:
         if (devenum)
             ICreateDevEnum_Release(devenum);
