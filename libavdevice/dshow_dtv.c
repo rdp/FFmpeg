@@ -52,7 +52,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
         IBaseFilter *bda_net_provider = NULL;
         IBaseFilter *bda_source_device = NULL;
         IBaseFilter *bda_receiver_device = NULL;
-        IBaseFilter *bda_filter_supplying_mpeg = NULL;
+        IBaseFilter *bda_filter_supplying_stream = NULL;
         IBaseFilter *bda_infinite_tee = NULL;
         IBaseFilter *bda_mpeg2_demux = NULL;
         IBaseFilter *bda_mpeg2_info = NULL;
@@ -121,8 +121,8 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             goto error;
         }
 
+        ///add dtv filters
 
-        ///add dtv input
         if (ctx->list_devices) {
             av_log(avctx, AV_LOG_INFO, "BDA tuners:\n");
             dshow_cycle_dtv_devices(avctx, NetworkTuner, devenum, NULL);
@@ -130,13 +130,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             dshow_cycle_dtv_devices(avctx, ReceiverComponent, devenum, NULL);
             goto error;
         }
-
-
-        //////////////////////////////////
-        /////////////setup tuner
-
-
-        ///create tune request
 
         r = IBaseFilter_QueryInterface(bda_net_provider, &IID_IScanningTuner, (void**) &scanning_tuner);
         if (r != S_OK) {
@@ -158,8 +151,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             BSTR bstr_name = NULL;
             char *psz_bstr_name = NULL;
 
-            SysFreeString(bstr_name);
-
             r = ITuningSpace_get_FriendlyName(tuning_space, &bstr_name);
             if(r != S_OK) {
                 /* should never fail on a good tuning space */
@@ -168,6 +159,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             }
 
             psz_bstr_name = dup_wchar_to_utf8(bstr_name);
+            SysFreeString(bstr_name);
             av_log(avctx, AV_LOG_INFO, "Using Tuning Space: %s\n", psz_bstr_name );
 
 
@@ -195,16 +187,11 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             goto error;
         }
 
-        av_log(avctx, AV_LOG_INFO, "Using def locator\n");
-
         r = ITuningSpace_get_DefaultLocator(tuning_space, &def_locator);
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not get default locator\n");
             goto error;
         }
-
-        av_log(avctx, AV_LOG_INFO, "create tune request\n");
-
 
         r = ITuningSpace_CreateTuneRequest(tuning_space, &tune_request);
         if (r != S_OK) {
@@ -218,8 +205,8 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             goto error;
         }
 
-        av_log(avctx, AV_LOG_INFO, "Def loator pre validate\n");
-
+        // this just means "can this tune request theoretically work with this card" 
+        // not whether the frequency is good.
         r = IScanningTuner_Validate(scanning_tuner, tune_request);
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Error validating tune request: r=0x%8x\n", r);
@@ -228,22 +215,18 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
 
         r = IScanningTuner_put_TuneRequest(scanning_tuner, tune_request);
         if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not set tune request\n");
+            av_log(avctx, AV_LOG_ERROR, "Could not put tune request\n");
             goto error;
         }
 
-
-        ///////////////
-        /////////////////////////////////////
-
-
-        ///---add network tuner
+        //////////////////////////////////////// add network tuner
+        
         if ((r = dshow_cycle_dtv_devices(avctx, NetworkTuner, devenum, &bda_source_device)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "Could not find BDA tuner.\n");
             goto error;
         }
 
-        bda_filter_supplying_mpeg = bda_source_device;
+        bda_filter_supplying_stream = bda_source_device;
 
         r = IGraphBuilder_AddFilter(graph, bda_source_device, NULL);
         if (r != S_OK) {
@@ -251,10 +234,9 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             goto error;
         }
 
-
         av_log(avctx, AV_LOG_INFO, "BDA tuner added\n");
 
-        ///connect msnetprovider and dtv
+        ///connect network provider and tuner
 
         r = dshow_connect_bda_pins(avctx, bda_net_provider, NULL, bda_source_device, NULL, NULL, NULL);
         if (r != S_OK) {
@@ -283,20 +265,15 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 av_log(avctx, AV_LOG_ERROR, "Could not connect generic network provider to tuner.\n");
                 goto error;
             }
-
-            av_log(avctx, AV_LOG_INFO, "Generic Network Provider added\n");
-
+            av_log(avctx, AV_LOG_INFO, "Generic Network Provider worked in its place\n");
         }
 
         ///---add receive component if requested
         if (ctx->receiver_component) {
-
             // find right named device
             if ((r = dshow_cycle_dtv_devices(avctx, ReceiverComponent, devenum, &bda_receiver_device)) < 0) {
                 goto error;
             }
-
-            bda_filter_supplying_mpeg = bda_receiver_device; 
 
             r = IGraphBuilder_AddFilter(graph, bda_receiver_device, NULL);
             if (r != S_OK) {
@@ -306,17 +283,17 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
 
             av_log(avctx, AV_LOG_INFO, "BDA Receiver Component added\n");
 
-            ///connect tuner to receiver
+            ///connect tuner to receiver component
 
             r = dshow_connect_bda_pins(avctx, bda_source_device, NULL, bda_receiver_device, NULL, NULL, NULL);
             if (r != S_OK) {
                 av_log(avctx, AV_LOG_ERROR, "Could not connect tuner to receiver component.\n");
                 goto error;
             }
+            bda_filter_supplying_stream = bda_receiver_device; 
         }
 
-
-        // create infinite tee so we can just grab the MPEG stream -> ffmpeg
+        // create infinite tee so we can just grab the MPEG TS stream -> ffmpeg
         r = CoCreateInstance(&CLSID_InfTee, NULL, CLSCTX_INPROC_SERVER,
                              &IID_IBaseFilter, (void **) &bda_infinite_tee);
         if (r != S_OK) {
@@ -328,15 +305,14 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             av_log(avctx, AV_LOG_ERROR, "Could not add BDA infinite tee to graph.\n");
             goto error;
         }
-        av_log(avctx, AV_LOG_ERROR, "success infinite tee to graph.\n");
 
-
-        r = dshow_connect_bda_pins(avctx, bda_filter_supplying_mpeg, NULL, bda_infinite_tee, NULL, NULL, NULL);
+        r = dshow_connect_bda_pins(avctx, bda_filter_supplying_stream, NULL, bda_infinite_tee, NULL, NULL, NULL);
         if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not connect bda supplier to infinite tee.\n");
+            av_log(avctx, AV_LOG_ERROR, "Could not connect bda pin to infinite tee.\n");
             goto error;
         }
-
+        
+        // still need the MS MPEG2 demux and "IB Input" filter to that, so that tuning still occurs
 
         r = CoCreateInstance(&CLSID_MPEG2Demultiplexer, NULL, CLSCTX_INPROC_SERVER,
                              &IID_IBaseFilter, (void **) &bda_mpeg2_demux);
@@ -351,14 +327,14 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             goto error;
         }
         if (use_infinite_tee_ts_stream)
-          r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, NULL, NULL);
+          r = dshow_connect_bda_pins(avctx, bda_infinite_tee, "Output1", bda_mpeg2_demux, NULL, NULL, NULL);
         else
-          r = dshow_connect_bda_pins(avctx, bda_infinite_tee, NULL, bda_mpeg2_demux, NULL, &bda_mpeg_video_pin, "3"); // TODO fix me! 003 also
+          r = dshow_connect_bda_pins(avctx, bda_infinite_tee, "Output1", bda_mpeg2_demux, NULL, &bda_mpeg_video_pin, "3"); // TODO fix me! 003 also
         if (r != S_OK) {
             goto error;
         }
+        // now the infinite tee will now have an "Output2" named pin since we just "used" Output1
 
-        // after this point the infinite tee will now have an "Output2" named pin
         if (use_infinite_tee_ts_stream) {
           r = dshow_lookup_pin(avctx, bda_infinite_tee, PINDIR_OUTPUT, &bda_mpeg_video_pin, "Output2", "split mpeg tee pin");
           if (r != S_OK) {
@@ -366,8 +342,8 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
           }
         }
 
-        //add DBA MPEG2 Transport information filter
-
+        // add DBA MPEG2 Transport information filter to MS demux pin "1"
+        
         r = CoCreateInstance(&CLSID_BDA_MPEG2_Transport_Informatiuon_Filter, NULL, CLSCTX_INPROC_SERVER,
                              &IID_IBaseFilter, (void **) &bda_mpeg2_info);
         if (r != S_OK) {
@@ -375,13 +351,11 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             goto error;
         }
 
-
         r = IGraphBuilder_AddFilter(graph, bda_mpeg2_info, NULL);
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not add BDA mpeg2 transport info filter to graph.\n");
             goto error;
         }
-
 
         r = dshow_connect_bda_pins(avctx, bda_mpeg2_demux, "1", bda_mpeg2_info, "IB Input", NULL, NULL);
         if (r != S_OK) {
@@ -407,9 +381,8 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             }
         }
 
-
-        //// if tuningspace == DVB-X
-        if ((ctx->dtv > 0) && (ctx->dtv < 4)) {
+        //// if tuningspace == DVB-X (i.e. not ATSC)
+        if (ctx->dtv > 0 && ctx->dtv < 4) {
 
             r = ITuneRequest_QueryInterface(tune_request, &IID_IDVBTuneRequest, (void **) &dvb_tune_request);
             if (r != S_OK) {
@@ -483,8 +456,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
 
             //// if tuningspace  == DVB-T
             if (ctx->dtv==2){
-                ///IDVBTuneRequest_put_SID(dvb_tune_request, 316 );
-
                 r = CoCreateInstance(&CLSID_DVBTLocator, NULL, CLSCTX_INPROC_SERVER,
                                      &IID_IDVBTLocator, (void **) &dvbt_locator);
                 if (r != S_OK) {
@@ -522,7 +493,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 }
  
                 if (ctx->dvbt_tune_bandwidth_mhz > 0) {
-                    av_log(avctx, AV_LOG_INFO, "Setting DVBT bandwidth %d\n", ctx->dvbt_tune_bandwidth_mhz);
+                    av_log(avctx, AV_LOG_INFO, "Setting dvbt_tune_bandwidth_mhz=%d\n", ctx->dvbt_tune_bandwidth_mhz);
                     r = IDVBTLocator_put_Bandwidth(dvbt_locator, ctx->dvbt_tune_bandwidth_mhz);
                     if (r != S_OK) {
                         av_log(avctx, AV_LOG_ERROR, "Could not set DVB-T bandwidth\n");
@@ -605,7 +576,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                     goto error;
                 }
             }
-
+            av_log(avctx, AV_LOG_DEBUG, "success setting DVB-X tune request\n");
         }
 
         //// if tuningspace == ATSC
@@ -617,8 +588,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 goto error;
             }
 
-            av_log(avctx, AV_LOG_INFO, "ATSCChannelTuneRequest acquired.\n");
-
             r = CoCreateInstance(&CLSID_ATSCLocator, NULL, CLSCTX_INPROC_SERVER,
                                  &IID_IATSCLocator, (void **) &atsc_locator);
             if (r != S_OK) {
@@ -627,7 +596,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             }
 
             if (ctx->tune_freq>0){
-                av_log(avctx, AV_LOG_INFO, "Set frequency %ld\n", ctx->tune_freq);
+                av_log(avctx, AV_LOG_INFO, "Setting ATSC frequency %ld\n", ctx->tune_freq);
                 r = IATSCLocator_put_CarrierFrequency(atsc_locator, ctx->tune_freq );
                 if (r != S_OK) {
                     av_log(avctx, AV_LOG_ERROR, "Could not set ATSC Locator\n");
@@ -652,7 +621,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 av_log(avctx, AV_LOG_ERROR, "Could not set atsc tune request\n");
                 goto error;
             }
-            av_log(avctx, AV_LOG_INFO, "success setting ATSC tune request");
+            av_log(avctx, AV_LOG_DEBUG, "success setting ATSC tune request\n");
         }
         
         ////////////////////////////////////////////
