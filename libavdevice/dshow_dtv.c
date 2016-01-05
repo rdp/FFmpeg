@@ -78,6 +78,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
         int use_infinite_tee_ts_stream = 1; // set to 1 to allow capture of "raw" MPEG TS incoming stream
         int r;
         IGraphBuilder *graph = ctx->graph;
+        ILocator *locator_used;
 
         const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
 
@@ -383,7 +384,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
 
         //// if tuningspace == DVB-X (i.e. not ATSC)
         if (ctx->dtv > 0 && ctx->dtv < 4) {
-            ILocator *locator_used;
 
             r = ITuneRequest_QueryInterface(tune_request, &IID_IDVBTuneRequest, (void **) &dvb_tune_request);
             if (r != S_OK) {
@@ -494,38 +494,8 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 }
                 locator_used = (ILocator *) dvbs_locator;
             }
-
-            if (ctx->tune_freq>0){
-                av_log(avctx, AV_LOG_INFO, "Set frequency %ld\n", ctx->tune_freq);
-                r = ILocator_put_CarrierFrequency(locator_used, ctx->tune_freq );
-                if (r != S_OK) {
-                    av_log(avctx, AV_LOG_ERROR, "Could not set tune freq %ld\n", ctx->tune_freq);
-                    goto error;
-                }
-            }
-
-            r = IDVBTuneRequest_put_Locator(dvb_tune_request, locator_used);
-            if (r != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Could not set DVB-C Locator to DVBTuneRequest\n");
-                goto error;
-            }
-
-            r = IScanningTuner_Validate(scanning_tuner, (ITuneRequest *) dvb_tune_request);
-            if (r != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Error validating dvb tune request: r=0x%8x\n", r );
-                goto error;
-            }
-
-            r = IScanningTuner_put_TuneRequest(scanning_tuner, (ITuneRequest *) dvb_tune_request);
-            if (r != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Could not set dvb tune request\n");
-                goto error;
-            }
-            av_log(avctx, AV_LOG_DEBUG, "success setting DVB-X tune request\n");
-        }
-
+        } else if (ctx->dtv == 4) {
         //// if tuningspace == ATSC
-        if (ctx->dtv == 4) {
 
             r = ITuneRequest_QueryInterface(tune_request, &IID_IATSCChannelTuneRequest, (void **) &atsc_tune_request);
             if (r != S_OK) {
@@ -539,35 +509,39 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 av_log(avctx, AV_LOG_ERROR, "Could not create ATSC Locator\n");
                 goto error;
             }
-
-            if (ctx->tune_freq>0){
-                av_log(avctx, AV_LOG_INFO, "Setting ATSC frequency %ld\n", ctx->tune_freq);
-                r = IATSCLocator_put_CarrierFrequency(atsc_locator, ctx->tune_freq );
-                if (r != S_OK) {
-                    av_log(avctx, AV_LOG_ERROR, "Could not set ATSC Locator\n");
-                    goto error;
-                }
-            }
-
-            r = IATSCChannelTuneRequest_put_Locator(atsc_tune_request, (ILocator *) atsc_locator);
-            if (r != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Could not set ATSC Locator to ATSCChannelTuneRequest\n");
-                goto error;
-            }
-
-            r = IScanningTuner_Validate(scanning_tuner, (ITuneRequest *) atsc_tune_request);
-            if (r != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Error validating atsc tune request: r=0x%8x\n", r );
-                goto error;
-            }
-
-            r = IScanningTuner_put_TuneRequest(scanning_tuner, (ITuneRequest *) atsc_tune_request);
-            if (r != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Could not set atsc tune request\n");
-                goto error;
-            }
-            av_log(avctx, AV_LOG_DEBUG, "success setting ATSC tune request\n");
+            locator_used = (ILocator *) atsc_locator;
+        } else {
+            av_log(avctx, AV_LOG_ERROR, "unknown tuning type %d\n", ctx->dtv);
+            goto error;
         }
+        
+        if (ctx->tune_freq>0){
+            r = ILocator_put_CarrierFrequency(locator_used, ctx->tune_freq );
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not set tune freq %ld\n", ctx->tune_freq);
+                goto error;
+            }
+            av_log(avctx, AV_LOG_DEBUG, "Success set tune_freq\n");
+        }
+
+        r = ITuneRequest_put_Locator(tune_request, locator_used);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not put locator on tune request\n");
+            goto error;
+        }
+
+        r = IScanningTuner_Validate(scanning_tuner, tune_request);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Error validating tune request\n");
+            goto error;
+        }
+
+        r = IScanningTuner_put_TuneRequest(scanning_tuner, tune_request);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not set put tune request to scanning tuner\n");
+            goto error;
+        }
+        av_log(avctx, AV_LOG_DEBUG, "success setting tune request type=%d\n", ctx->dtv);
         
         ////////////////////////////////////////////
 
