@@ -916,7 +916,7 @@ void dshow_log_signal_strength(AVFormatContext *h, int level) {
     int hr;
     hr = ITuner_get_SignalStrength(ctx->scanning_tuner, &signal_strength);
     if (hr == S_OK)
-      av_log(h, level, "signal strength %d (freq=%ld)\n", signal_strength, ctx->tune_freq);
+      av_log(h, level, "signal strength %ld (freq=%ld)\n", signal_strength, ctx->tune_freq);
     else
-      av_log(h, AV_LOG_ERROR, "unable to determine signal strength %ld\n", hr);
+      av_log(h, AV_LOG_ERROR, "unable to determine signal strength (%d)\n", hr);
 }
