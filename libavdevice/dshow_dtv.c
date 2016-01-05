@@ -509,6 +509,14 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 av_log(avctx, AV_LOG_ERROR, "Could not create ATSC Locator\n");
                 goto error;
             }
+            if (ctx->atsc_physical_channel) {
+                r = IATSCLocator_put_PhysicalChannel(atsc_locator, ctx->atsc_physical_channel);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Could not specify ATSC physical channel %d\n", ctx->atsc_physical_channel);
+                    goto error;
+                }               
+                av_log(avctx, AV_LOG_DEBUG, "Success specify ATSC physical channel %d\n", ctx->atsc_physical_channel);
+            }
             locator_used = (ILocator *) atsc_locator;
         } else {
             av_log(avctx, AV_LOG_ERROR, "unknown tuning type %d\n", ctx->dtv);
