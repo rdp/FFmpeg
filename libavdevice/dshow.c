@@ -1328,7 +1328,7 @@ static int dshow_read_header(AVFormatContext *avctx)
         goto error;
     }
 
-    av_log(avctx, AV_LOG_INFO, "starting/running graph");
+    av_log(avctx, AV_LOG_DEBUG, "starting/running graph\n");
     r = IMediaControl_Run(control);
     if (r == S_FALSE) {
         OAFilterState pfs;
