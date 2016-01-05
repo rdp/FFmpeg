@@ -29,6 +29,7 @@
 #include "libavcodec/raw.h"
 #include "objidl.h"
 #include "shlwapi.h"
+#include "strmif.h"
 #include "libavformat/url.h"
 #include "libavutil/avstring.h" // avstrstart
 #include "libavutil/avassert.h"
@@ -293,6 +294,7 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
                     av_log(avctx, AV_LOG_ERROR, "Unable to BindToObject for %s\n", device_name);
                     goto fail1;
                 }
+                // success, loop will end now
             }
         } else {
             av_log(avctx, AV_LOG_INFO, " \"%s\"\n", friendly_name);
@@ -750,9 +752,9 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     IStream *ifile_stream = NULL;
     IStream *ofile_stream = NULL;
     IPersistStream *pers_stream = NULL;
+    enum dshowDeviceType otherDevType = (devtype == VideoDevice) ? AudioDevice : VideoDevice;
 
     const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
-
 
     if ( ((ctx->audio_filter_load_file) && (strlen(ctx->audio_filter_load_file)>0) && (sourcetype == AudioSourceDevice)) ||
             ((ctx->video_filter_load_file) && (strlen(ctx->video_filter_load_file)>0) && (sourcetype == VideoSourceDevice)) ) {
@@ -788,7 +790,24 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
             goto error;
         }
     }
-
+    if (ctx->device_filter[otherDevType]) {
+        CLSID old_clsid, new_clsid;
+        r = IBaseFilter_GetClassID(ctx->device_filter[otherDevType], &old_clsid);
+        r |= IBaseFilter_GetClassID(device_filter, &new_clsid);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "unable to lookup CLSID for comparison\n");
+            ret = r;
+            goto error;
+        }
+        if (IsEqualCLSID(&old_clsid, &new_clsid)) {
+          av_log(avctx, AV_LOG_DEBUG, "reusing previous graph capture filter...\n");
+          IBaseFilter_Release(device_filter);
+          device_filter = ctx->device_filter[otherDevType];
+          IBaseFilter_AddRef(ctx->device_filter[otherDevType]);
+        } else
+          av_log(avctx, AV_LOG_DEBUG, "not reusing previous graph capture filter\n");
+    }
+     
     ctx->device_filter [devtype] = device_filter;
 
     r = IGraphBuilder_AddFilter(graph, device_filter, NULL);
@@ -997,6 +1016,7 @@ error:
             return r;
 }
 
+// called after the pin for the given type has already been set and saved
 int
 dshow_add_device(AVFormatContext *avctx,
                  enum dshowDeviceType devtype)
@@ -1476,8 +1496,8 @@ static const AVOption options[] = {
     { "tune_freq", "set channel frequency (kHz)", OFFSET(tune_freq), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "dvbt_tune_bandwidth_mhz", "specify DVB-T bandwidth (MHz, typically 7 or 8)", OFFSET(dvbt_tune_bandwidth_mhz), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "receiver_component", "BDA receive component filter name", OFFSET(receiver_component), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
-    { "dump_dtv_graph", "save dtv graph to file", OFFSET(dtv_graph_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
-    { "dump_raw_bytes_file", "save incoming bytes verbatim to file", OFFSET(dump_raw_bytes_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { "dump_graph_filename", "save dtv graph to file", OFFSET(dtv_graph_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { "dump_raw_bytes_filename", "save incoming bytes verbatim to file", OFFSET(dump_raw_bytes_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { NULL },
 };
 
