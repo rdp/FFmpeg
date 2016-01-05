@@ -1405,6 +1405,8 @@ AVInputFormat ff_dshow_demuxer;
 static int dshow_url_open(URLContext *h, const char *filename, int flags)
 {
     struct dshow_ctx *ctx = h->priv_data;
+    int r;
+    
     if (!(ctx->protocol_av_format_context = avformat_alloc_context()))
      return AVERROR(ENOMEM);
     ctx->protocol_av_format_context->flags = h->flags; 
@@ -1418,7 +1420,10 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
     if (!ctx->protocol_latest_packet)
       return AVERROR(ENOMEM);
     ctx->protocol_av_format_context->priv_data = ctx; // a bit circular, but needed to pass through the settings
-    return dshow_read_header(ctx->protocol_av_format_context);
+    r = dshow_read_header(ctx->protocol_av_format_context);
+    if (r == S_OK)
+        dshow_log_signal_strength(ctx->protocol_av_format_context, AV_LOG_INFO);
+    return r;
 }
 
 static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size) 
@@ -1444,7 +1449,9 @@ static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size)
         av_log(h, AV_LOG_DEBUG, "passing partial dshow packet %d > %d\n", bytes_left, max_size);
     memcpy(buf, &ctx->protocol_latest_packet->data[ctx->protocol_latest_packet->pos], bytes_to_copy);
     ctx->protocol_latest_packet->pos += bytes_to_copy; 
-    dshow_log_signal_strength(ctx->protocol_av_format_context);
+    if (ctx->video_frame_num % (30*60) == 0) { // once/min
+      dshow_log_signal_strength(ctx->protocol_av_format_context, AV_LOG_VERBOSE);
+    }
     return bytes_to_copy;;
 }
 

@@ -153,7 +153,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
 
         tuning_space_network_type = GUID_NULL;
 
-
         while (S_OK == IEnumTuningSpaces_Next(tuning_space_enum, 1, &tuning_space, NULL))
         {
             BSTR bstr_name = NULL;
@@ -655,9 +654,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             }
             av_log(avctx, AV_LOG_INFO, "success setting ATSC tune request");
         }
-
-
-        ///////
+        
         ////////////////////////////////////////////
 
         capture_filter = libAVFilter_Create(avctx, dshow_frame_callback, VideoDevice);
@@ -944,15 +941,13 @@ fail1:
     return 0;
 }
 
-void dshow_log_signal_strength(AVFormatContext *h) {
-  struct dshow_ctx *ctx = h->priv_data;
-  if (ctx->video_frame_num % (30*60) == 0) { // once/min
+void dshow_log_signal_strength(AVFormatContext *h, int level) {
+    struct dshow_ctx *ctx = h->priv_data;
     long signal_strength;
     int hr;
     hr = ITuner_get_SignalStrength(ctx->scanning_tuner, &signal_strength);
     if (hr == S_OK)
-      av_log(h, AV_LOG_VERBOSE, "signal strength %ld\n", signal_strength);
+      av_log(h, level, "signal strength %d (freq=%ld)\n", signal_strength, ctx->tune_freq);
     else
-      av_log(h, AV_LOG_DEBUG, "unable to determine signal strength %d\n", hr);
-  }
+      av_log(h, AV_LOG_ERROR, "unable to determine signal strength %ld\n", hr);
 }

@@ -379,6 +379,6 @@ int dshow_add_device(AVFormatContext *avctx, enum dshowDeviceType devtype);
 void
 dshow_frame_callback(void *priv_data, int index, uint8_t *buf, int buf_size, int64_t time, enum dshowDeviceType devtype);
 
-void dshow_log_signal_strength(AVFormatContext *h);
+void dshow_log_signal_strength(AVFormatContext *h, int level);
 
 #endif /* AVDEVICE_DSHOW_H */
