@@ -117,7 +117,11 @@ dshow_read_close(AVFormatContext *s)
         av_freep(&ctx->device_name[0]);
     if (ctx->device_name[1])
         av_freep(&ctx->device_name[1]);
-
+    if (ctx->device_unique_name[0])
+        av_freep(&ctx->device_unique_name[0]);
+    if (ctx->device_unique_name[1])
+        av_freep(&ctx->device_unique_name[1]);
+    
     if(ctx->mutex)
         CloseHandle(ctx->mutex);
     if(ctx->event[0])
@@ -222,7 +226,8 @@ fail:
  */
 static int
 dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
-                    enum dshowDeviceType devtype, enum dshowSourceFilterType sourcetype, IBaseFilter **pfilter)
+                    enum dshowDeviceType devtype, enum dshowSourceFilterType sourcetype, 
+                    IBaseFilter **pfilter, char **device_uniqe_name)
 {
     struct dshow_ctx *ctx = avctx->priv_data;
     IBaseFilter *device_filter = NULL;
@@ -293,11 +298,13 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
                     av_log(avctx, AV_LOG_ERROR, "Unable to BindToObject for %s\n", device_name);
                     goto fail1;
                 }
+                *device_uniqe_name = unique_name;
                 // success, loop will end now
             }
         } else {
             av_log(avctx, AV_LOG_INFO, " \"%s\"\n", friendly_name);
             av_log(avctx, AV_LOG_INFO, "    Alternative name \"%s\"\n", unique_name);
+            av_free(unique_name);
         }
 
 fail1:
@@ -306,7 +313,6 @@ fail1:
         if (bind_ctx)
             IBindCtx_Release(bind_ctx);
         av_free(friendly_name);
-        av_free(unique_name);
         if (bag)
             IPropertyBag_Release(bag);
         IMoniker_Release(m);
@@ -724,14 +730,15 @@ dshow_list_device_options(AVFormatContext *avctx, ICreateDevEnum *devenum,
 {
     struct dshow_ctx *ctx = avctx->priv_data;
     IBaseFilter *device_filter = NULL;
+    char *device_unique_name = NULL;
     int r;
 
-    if ((r = dshow_cycle_devices(avctx, devenum, devtype, sourcetype, &device_filter)) < 0)
+    if ((r = dshow_cycle_devices(avctx, devenum, devtype, sourcetype, &device_filter, &device_unique_name)) < 0)
         return r;
     ctx->device_filter[devtype] = device_filter;
     if ((r = dshow_cycle_pins(avctx, devtype, sourcetype, device_filter, NULL)) < 0)
         return r;
-
+    av_freep(&device_unique_name);
     return 0;
 }
 
@@ -741,6 +748,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
 {
     struct dshow_ctx *ctx = avctx->priv_data;
     IBaseFilter *device_filter = NULL;
+    char *device_filter_unique_name = NULL;
     IGraphBuilder *graph = ctx->graph;
     IPin *device_pin = NULL;
     libAVPin *capture_pin = NULL;
@@ -757,6 +765,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
 
     if ( ((ctx->audio_filter_load_file) && (strlen(ctx->audio_filter_load_file)>0) && (sourcetype == AudioSourceDevice)) ||
             ((ctx->video_filter_load_file) && (strlen(ctx->video_filter_load_file)>0) && (sourcetype == VideoSourceDevice)) ) {
+        // parse from file
         HRESULT hr;
         char *filename = NULL;
 
@@ -784,30 +793,24 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         av_log(avctx, AV_LOG_INFO, "Capture filter loaded successfully from file \"%s\".\n", filename);
     } else {
 
-        if ((r = dshow_cycle_devices(avctx, devenum, devtype, sourcetype, &device_filter)) < 0) {
+        if ((r = dshow_cycle_devices(avctx, devenum, devtype, sourcetype, &device_filter, &device_filter_unique_name)) < 0) {
             ret = r;
             goto error;
         }
     }
     if (ctx->device_filter[otherDevType]) {
-        CLSID old_clsid, new_clsid;
-        r = IBaseFilter_GetClassID(ctx->device_filter[otherDevType], &old_clsid);
-        r |= IBaseFilter_GetClassID(device_filter, &new_clsid);
-        if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "unable to lookup CLSID for comparison\n");
-            ret = r;
-            goto error;
-        }
-        if (IsEqualCLSID(&old_clsid, &new_clsid)) {
+        // don't add two copies of the same device to the graph (could do this earlier to avoid double crossbars, etc.)
+        if (strcmp(device_filter_unique_name, ctx->device_unique_name[otherDevType]) == 0) {
           av_log(avctx, AV_LOG_DEBUG, "reusing previous graph capture filter...\n");
           IBaseFilter_Release(device_filter);
           device_filter = ctx->device_filter[otherDevType];
           IBaseFilter_AddRef(ctx->device_filter[otherDevType]);
         } else
-          av_log(avctx, AV_LOG_DEBUG, "not reusing previous graph capture filter\n");
+          av_log(avctx, AV_LOG_DEBUG, "not reusing previous graph capture filter %s != %s\n", device_filter_unique_name, ctx->device_unique_name[otherDevType]);
     }
      
     ctx->device_filter [devtype] = device_filter;
+    ctx->device_unique_name [devtype] = device_filter_unique_name;
 
     r = IGraphBuilder_AddFilter(graph, device_filter, NULL);
     if (r != S_OK) {
@@ -1235,9 +1238,9 @@ static int dshow_read_header(AVFormatContext *avctx)
 
         if (ctx->list_devices) {
             av_log(avctx, AV_LOG_INFO, "DirectShow video devices (some may be both video and audio devices)\n");
-            dshow_cycle_devices(avctx, devenum, VideoDevice, VideoSourceDevice, NULL);
+            dshow_cycle_devices(avctx, devenum, VideoDevice, VideoSourceDevice, NULL, NULL);
             av_log(avctx, AV_LOG_INFO, "DirectShow audio devices\n");
-            dshow_cycle_devices(avctx, devenum, AudioDevice, AudioSourceDevice, NULL);
+            dshow_cycle_devices(avctx, devenum, AudioDevice, AudioSourceDevice, NULL, NULL);
             ret = AVERROR_EXIT;
             goto error;
         }
