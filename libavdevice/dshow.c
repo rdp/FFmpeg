@@ -29,7 +29,6 @@
 #include "libavcodec/raw.h"
 #include "objidl.h"
 #include "shlwapi.h"
-#include "strmif.h"
 #include "libavformat/url.h"
 #include "libavutil/avstring.h" // avstrstart
 #include "libavutil/avassert.h"
