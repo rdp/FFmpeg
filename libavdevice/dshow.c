@@ -29,12 +29,10 @@
 #include "libavcodec/raw.h"
 #include "objidl.h"
 #include "shlwapi.h"
+#include "bdamedia.h" // KSDATAFORMAT...
 #include "libavformat/url.h"
 #include "libavutil/avstring.h" // avstrstart
 #include "libavutil/avassert.h"
-
-static const GUID KSDATAFORMAT_SUBTYPE_BDA_MPEG2_TRANSPORT_LOCAL =
-    {0xf4aeb342,0x0329,0x4fdd,{0xa8,0xfd,0x4a,0xff,0x49,0x26,0xc9,0x78}};
 
 static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
 {
@@ -1064,7 +1062,7 @@ dshow_add_device(AVFormatContext *avctx,
           //AVMEDIA_TYPE_VIDEO AV_CODEC_ID_MPEG2VIDEO
           is_mpeg = 1; // NB this has biWidth set but its actually "wrong" or "could be overriden" or the like <sigh>
           av_log(avctx, AV_LOG_ERROR, "got mpeg2video output, which is unsupported currently, ask about it please");
-        } else if (IsEqualGUID(&type.subtype, &KSDATAFORMAT_SUBTYPE_BDA_MPEG2_TRANSPORT_LOCAL)) {
+        } else if (IsEqualGUID(&type.subtype, &KSDATAFORMAT_SUBTYPE_BDA_MPEG2_TRANSPORT)) {
             if (ctx->protocol_av_format_context == NULL) {
               av_log(avctx, AV_LOG_ERROR, "got raw MPEG2 TS stream without being in a urlprotocol context, please rerun like dshowbda:video= instead...");
               ret = AVERROR(EIO);
@@ -1464,7 +1462,7 @@ static int dshow_url_close(URLContext *h)
     int ret = dshow_read_close(ctx->protocol_av_format_context);
     ctx->protocol_av_format_context->priv_data = NULL; // just in case it would be freed below
     avformat_free_context(ctx->protocol_av_format_context);
-    av_packet_free(&ctx->protocol_latest_packet); // free wrapper, also does an unref
+    av_packet_free(&ctx->protocol_latest_packet); // also does an unref
     return ret;
 }
 

@@ -20,7 +20,8 @@
  */
 
 #include "dshow_capture.h"
-#include "bdadefs.h"
+#include <tuner.h>
+#include <uuids.h>
 
 // local defines:
 static const CLSID CLSID_NetworkProvider =
@@ -29,15 +30,8 @@ static const GUID KSCATEGORY_BDA_NETWORK_TUNER =
     {0x71985f48,0x1ca1,0x11d3,{0x9c,0xc8,0x00,0xc0,0x4f,0x79,0x71,0xe0}};
 static const GUID KSCATEGORY_BDA_RECEIVER_COMPONENT    =
     {0xFD0A5AF4,0xB41D,0x11d2,{0x9c,0x95,0x00,0xc0,0x4f,0x79,0x71,0xe0}};
-static const GUID KSCATEGORY_BDA_TRANSPORT_INFORMATION =
-    {0xa2e3074f,0x6c3d,0x11d3,{0xb6,0x53,0x00,0xc0,0x4f,0x79,0x49,0x8e}};
-
-//const CLSID CLSID_MPEG2Demultiplexer =
-//    {0xAFB6C280,0x2C41,0x11D3,{0x8A,0x60,0x00,0x00,0xF8,0x1E,0x0E,0x4A}};
-static const CLSID CLSID_BDA_MPEG2_Transport_Informatiuon_Filter =
+static const CLSID CLSID_BDA_MPEG2_Transport_Information_Filter =
     {0xFC772AB0,0x0C7F,0x11D3,{0x8F,0xF2,0x00,0xA0,0xC9,0x22,0x4C,0xF4}};
-static const CLSID CLSID_MS_DTV_DVD_Decoder =
-    {0x212690FB,0x83E5,0x4526,{0x8F,0xD7,0x74,0x47,0x8B,0x79,0x39,0xCD}}; //ms dtv decoder
 
 static int
 dshow_lookup_pin(AVFormatContext *avctx, IBaseFilter *filter, PIN_DIRECTION pin_direction, IPin **discovered_pin, const char *lookup_pin_name, const char *filter_descriptive_text);
@@ -345,7 +339,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
 
         // add DBA MPEG2 Transport information filter to MS demux pin "1"
         
-        r = CoCreateInstance(&CLSID_BDA_MPEG2_Transport_Informatiuon_Filter, NULL, CLSCTX_INPROC_SERVER,
+        r = CoCreateInstance(&CLSID_BDA_MPEG2_Transport_Information_Filter, NULL, CLSCTX_INPROC_SERVER,
                              &IID_IBaseFilter, (void **) &bda_mpeg2_info);
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not create BDA mpeg2 info filter\n");
