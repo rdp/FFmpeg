@@ -1464,7 +1464,7 @@ static int dshow_url_close(URLContext *h)
     int ret = dshow_read_close(ctx->protocol_av_format_context);
     ctx->protocol_av_format_context->priv_data = NULL; // just in case it would be freed below
     avformat_free_context(ctx->protocol_av_format_context);
-    av_packet_free(&ctx->protocol_latest_packet); // free wrapper, also does an unref
+    av_packet_free(&ctx->protocol_latest_packet); // also does an unref
     return ret;
 }
 
