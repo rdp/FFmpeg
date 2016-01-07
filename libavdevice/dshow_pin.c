@@ -308,6 +308,25 @@ libAVMemInputPin_GetAllocatorRequirements(libAVMemInputPin *this,
     REFERENCE_TIME graphtime;
     REFERENCE_TIME dummy4;
 
+    
+static void printBits(size_t const size, void const * const ptr)
+{
+    unsigned char *b = (unsigned char*) ptr;
+    unsigned char byte;
+    int i, j;
+
+    for (i=size-1;i>=0;i--)
+    {
+        for (j=7;j>=0;j--)
+        {
+            byte = b[i] & (1<<j);
+            byte >>= j;
+            printf("%u", byte);
+        }
+    }
+    puts("");
+}
+    
 long WINAPI
 libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
 {
@@ -322,15 +341,20 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     IReferenceClock *clock = pin->filter->clock;
     REFERENCE_TIME dummy;
     struct dshow_ctx *ctx;
-
+    IMediaSample2 *sample2 = NULL;
+    int hr;
+    
 
     dshowdebug("libAVMemInputPin_Receive(%p)\n", this);
 
     if (!sample)
         return E_POINTER;
+    
+    
+    
     // start time seems to work ok
-    IMediaSample_GetTime(sample, &orig_curtime, &dummy);
-    printf("adding %lld to %lld\n", pin->filter->start_time, orig_curtime);
+    hr = IMediaSample_GetTime(sample, &orig_curtime, &dummy);
+    printf("adding %lld to %lld hr=%d VFW_E_SAMPLE_TIME_NOT_SET=%d\n", pin->filter->start_time, orig_curtime, hr, VFW_E_SAMPLE_TIME_NOT_SET);
     IMediaSample_GetTime(sample, &dummy2, &dummy);
     printf("adding %lld to %lld\n", pin->filter->start_time, dummy2);
     IMediaSample_GetTime(sample, &dummy3, &dummy);
@@ -359,6 +383,16 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
         av_log(NULL, AV_LOG_VERBOSE, "after calculating both same  %lld ==  %lld \n", orig_curtime, curtime );
     }
 
+    hr = IMediaSample_QueryInterface(sample, &IID_IMediaSample2, (void **) &sample2);
+    if (hr == S_OK) {
+        AM_SAMPLE2_PROPERTIES props;
+        IMediaSample2_GetProperties(sample2, sizeof(props), (BYTE *) &props);
+        
+        printf("got a mediasample2 timestamp=%lld timevalid=%ld sampleflags=0x%lx  ", orig_curtime, props.dwSampleFlags & AM_SAMPLE_TIMEVALID, props.dwSampleFlags);
+        printBits(sizeof(props.dwSampleFlags), &props.dwSampleFlags);
+        printf("\n");
+        IMediaSample2_Release(sample2);
+    }
     buf_size = IMediaSample_GetActualDataLength(sample);
     IMediaSample_GetPointer(sample, &buf);
     priv_data = pin->filter->priv_data;
