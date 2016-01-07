@@ -992,6 +992,100 @@ stream ends. The default value is 2 seconds.
 
 @end table
 
+@section anequalizer
+
+High-order parametric multiband equalizer for each channel.
+
+It accepts the following parameters:
+@table @option
+@item params
+
+This option string is in format:
+"c@var{chn} f=@var{cf} w=@var{w} g=@var{g} t=@var{f} | ..."
+Each equalizer band is separated by '|'.
+
+@table @option
+@item chn
+Set channel number to which equalization will be applied.
+If input doesn't have that channel the entry is ignored.
+
+@item cf
+Set central frequency for band.
+If input doesn't have that frequency the entry is ignored.
+
+@item w
+Set band width in hertz.
+
+@item g
+Set band gain in dB.
+
+@item f
+Set filter type for band, optional, can be:
+
+@table @samp
+@item 0
+Butterworth, this is default.
+
+@item 1
+Chebyshev type 1.
+
+@item 2
+Chebyshev type 2.
+@end table
+@end table
+
+@item curves
+With this option activated frequency response of anequalizer is displayed
+in video stream.
+
+@item size
+Set video stream size. Only useful if curves option is activated.
+
+@item mgain
+Set max gain that will be displayed. Only useful if curves option is activated.
+Setting this to reasonable value allows to display gain which is derived from
+neighbour bands which are too close to each other and thus produce higher gain
+when both are activated.
+
+@item fscale
+Set frequency scale used to draw frequency response in video output.
+Can be linear or logarithmic. Default is logarithmic.
+
+@item colors
+Set color for each channel curve which is going to be displayed in video stream.
+This is list of color names separated by space or by '|'.
+Unrecognised or missing colors will be replaced by white color.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Lower gain by 10 of central frequency 200Hz and width 100 Hz
+for first 2 channels using Chebyshev type 1 filter:
+@example
+anequalizer=c0 f=200 w=100 g=-10 t=1|c1 f=200 w=100 g=-10 t=1
+@end example
+@end itemize
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item change
+Alter existing filter parameters.
+Syntax for the commands is : "@var{fN}|f=@var{freq}|w=@var{width}|g=@var{gain}"
+
+@var{fN} is existing filter number, starting from 0, if no such filter is available
+error is returned.
+@var{freq} set new frequency parameter.
+@var{width} set new width parameter in herz.
+@var{gain} set new gain parameter in dB.
+
+Full filter invocation with asendcmd may look like this:
+asendcmd=c='4.0 anequalizer change 0|f=200|w=50|g=1',anequalizer=...
+@end table
+
 @section anull
 
 Pass the audio source unchanged to the output.
@@ -2875,6 +2969,14 @@ at the beginning of each period of silence.
 For example, if you want to remove long pauses between words but do not want
 to remove the pauses completely. Default value is @code{0}.
 
+@item detection
+Set how is silence detected. Can be @code{rms} or @code{peak}. Second is faster
+and works better with digital silence which is exactly 0.
+Default value is @code{rms}.
+
+@item window
+Set ratio used to calculate size of window for detecting silence.
+Default value is @code{0.02}. Allowed range is from @code{0} to @code{10}.
 @end table
 
 @subsection Examples
@@ -2887,6 +2989,13 @@ pressing the record button and the start of the performance:
 @example
 silenceremove=1:5:0.02
 @end example
+
+@item
+Trim all silence encountered from begining to end where there is more than 1
+second of silence in audio:
+@example
+silenceremove=0:0:0:-1:1:-90dB
+@end example
 @end itemize
 
 @section sofalizer
@@ -2894,9 +3003,12 @@ silenceremove=1:5:0.02
 SOFAlizer uses head-related transfer functions (HRTFs) to create virtual
 loudspeakers around the user for binaural listening via headphones (audio
 formats up to 9 channels supported).
-The HRTFs are stored in SOFA files (see www.sofacoustics.org for a database).
+The HRTFs are stored in SOFA files (see @url{http://www.sofacoustics.org/} for a database).
 SOFAlizer is developed at the Acoustics Research Institute (ARI) of the
 Austrian Academy of Sciences.
+
+To enable compilation of this filter you need to configure FFmpeg with
+@code{--enable-netcdf}.
 
 The filter accepts the following options:
 
@@ -13260,6 +13372,20 @@ Allowed range is @code{[0, 255]}.
 
 @item zoom
 Set the zoom factor. Default value is @code{1}. Allowed range is @code{[1, 10]}.
+
+@item draw
+Set the vectorscope drawing mode.
+
+Available values are:
+@table @samp
+@item dot
+Draw dot for each sample.
+
+@item line
+Draw line between previous and current sample.
+@end table
+
+Default value is @samp{dot}.
 @end table
 
 @subsection Examples
@@ -14423,6 +14549,7 @@ It accepts the following values:
 @item nuttall
 @item lanczos
 @item gauss
+@item tukey
 @end table
 Default is @code{hanning}.
 
@@ -14473,6 +14600,8 @@ It accepts the following values:
 the samples start again on the left when they reach the right
 @item scroll
 the samples scroll from right to left
+@item rscroll
+the samples scroll from left to right
 @item fullframe
 frames are only produced when the samples reach the right
 @end table
@@ -14500,7 +14629,19 @@ It accepts the following values:
 @item channel
 each channel is displayed in a separate color
 @item intensity
-each channel is is displayed using the same color scheme
+each channel is displayed using the same color scheme
+@item rainbow
+each channel is displayed using the rainbow color scheme
+@item moreland
+each channel is displayed using the moreland color scheme
+@item nebulae
+each channel is displayed using the nebulae color scheme
+@item fire
+each channel is displayed using the fire color scheme
+@item fiery
+each channel is displayed using the fiery color scheme
+@item fruit
+each channel is displayed using the fruit color scheme
 @end table
 
 Default value is @samp{channel}.
@@ -14516,6 +14657,10 @@ linear
 square root, default
 @item cbrt
 cubic root
+@item 4thrt
+4th root
+@item 5thrt
+5th root
 @item log
 logarithmic
 @end table
@@ -14533,17 +14678,38 @@ Set window function.
 
 It accepts the following values:
 @table @samp
-@item none
-No samples pre-processing (do not expect this to be faster)
+@item rect
+@item bartlett
 @item hann
-Hann window
+@item hanning
 @item hamming
-Hamming window
 @item blackman
-Blackman window
+@item welch
+@item flattop
+@item bharris
+@item bnuttall
+@item bhann
+@item sine
+@item nuttall
+@item lanczos
+@item gauss
+@item tukey
 @end table
 
 Default value is @code{hann}.
+
+@item orientation
+Set orientation of time vs frequency axis. Can be @code{vertical} or
+@code{horizontal}. Default is @code{vertical}.
+
+@item overlap
+Set ratio of overlap window. Default value is @code{0}.
+When value is @code{1} overlap is set to recommended size for specific
+window function currently used.
+
+@item gain
+Set scale gain for calculating intensity color values.
+Default value is @code{1}.
 @end table
 
 The usage is very similar to the showwaves filter; see the examples in that
@@ -14563,6 +14729,124 @@ Complete example for a colored and sliding spectrum per channel using @command{f
 @example
 ffplay -f lavfi 'amovie=input.mp3, asplit [a][out1];
              [a] showspectrum=mode=separate:color=intensity:slide=1:scale=cbrt [out0]'
+@end example
+@end itemize
+
+@section showspectrumpic
+
+Convert input audio to a single video frame, representing the audio frequency
+spectrum.
+
+The filter accepts the following options:
+
+@table @option
+@item size, s
+Specify the video size for the output. For the syntax of this option, check the
+@ref{video size syntax,,"Video size" section in the ffmpeg-utils manual,ffmpeg-utils}.
+Default value is @code{4096x2048}.
+
+@item mode
+Specify display mode.
+
+It accepts the following values:
+@table @samp
+@item combined
+all channels are displayed in the same row
+@item separate
+all channels are displayed in separate rows
+@end table
+Default value is @samp{combined}.
+
+@item color
+Specify display color mode.
+
+It accepts the following values:
+@table @samp
+@item channel
+each channel is displayed in a separate color
+@item intensity
+each channel is displayed using the same color scheme
+@item rainbow
+each channel is displayed using the rainbow color scheme
+@item moreland
+each channel is displayed using the moreland color scheme
+@item nebulae
+each channel is displayed using the nebulae color scheme
+@item fire
+each channel is displayed using the fire color scheme
+@item fiery
+each channel is displayed using the fiery color scheme
+@item fruit
+each channel is displayed using the fruit color scheme
+@end table
+Default value is @samp{intensity}.
+
+@item scale
+Specify scale used for calculating intensity color values.
+
+It accepts the following values:
+@table @samp
+@item lin
+linear
+@item sqrt
+square root, default
+@item cbrt
+cubic root
+@item 4thrt
+4th root
+@item 5thrt
+5th root
+@item log
+logarithmic
+@end table
+Default value is @samp{log}.
+
+@item saturation
+Set saturation modifier for displayed colors. Negative values provide
+alternative color scheme. @code{0} is no saturation at all.
+Saturation must be in [-10.0, 10.0] range.
+Default value is @code{1}.
+
+@item win_func
+Set window function.
+
+It accepts the following values:
+@table @samp
+@item rect
+@item bartlett
+@item hann
+@item hanning
+@item hamming
+@item blackman
+@item welch
+@item flattop
+@item bharris
+@item bnuttall
+@item bhann
+@item sine
+@item nuttall
+@item lanczos
+@item gauss
+@end table
+Default value is @code{hann}.
+
+@item orientation
+Set orientation of time vs frequency axis. Can be @code{vertical} or
+@code{horizontal}. Default is @code{vertical}.
+
+@item gain
+Set scale gain for calculating intensity color values.
+Default value is @code{1}.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Extract an audio spectrogram of a whole audio track
+in a 1024x1024 picture using @command{ffmpeg}:
+@example
+ffmpeg -i audio.flac -lavfi showspectrumpic=s=1024x1024 spectrogram.png
 @end example
 @end itemize
 
@@ -14697,6 +14981,14 @@ Extract a channel split representation of the wave form of a whole audio track
 in a 1024x800 picture using @command{ffmpeg}:
 @example
 ffmpeg -i audio.flac -lavfi showwavespic=split_channels=1:s=1024x800 waveform.png
+@end example
+
+@item
+Colorize the waveform with colorchannelmixer. This example will make
+the waveform a green color approximately RGB(66,217,150). Additional
+channels will be shades of this color.
+@example
+ffmpeg -i audio.mp3 -filter_complex "showwavespic,colorchannelmixer=rr=66/255:gg=217/255:bb=150/255" waveform.png
 @end example
 @end itemize
 

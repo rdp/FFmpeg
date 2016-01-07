@@ -250,7 +250,6 @@ External library support:
   --enable-libsoxr         enable Include libsoxr resampling [no]
   --enable-libspeex        enable Speex de/encoding via libspeex [no]
   --enable-libssh          enable SFTP protocol via libssh [no]
-  --enable-libstagefright-h264  enable H.264 decoding via libstagefright [no]
   --enable-libtesseract    enable Tesseract, needed for ocr filter [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libtwolame      enable MP2 encoding via libtwolame [no]
@@ -1478,7 +1477,6 @@ EXTERNAL_LIBRARY_LIST="
     libsoxr
     libspeex
     libssh
-    libstagefright_h264
     libtesseract
     libtheora
     libtwolame
@@ -1666,6 +1664,7 @@ ARCH_EXT_LIST_MIPS="
     mipsfpu
     mips32r2
     mips64r2
+    mips32r6
     mips64r6
     mipsdsp
     mipsdspr2
@@ -1777,6 +1776,8 @@ HEADERS_LIST="
     machine_ioctl_bt848_h
     machine_ioctl_meteor_h
     malloc_h
+    openjpeg_2_1_openjpeg_h
+    openjpeg_2_0_openjpeg_h
     openjpeg_1_5_openjpeg_h
     OpenGL_gl3_h
     poll_h
@@ -1815,8 +1816,6 @@ MATH_FUNCS="
     copysign
     cosf
     erf
-    exp10
-    exp10f
     exp2
     exp2f
     expf
@@ -2155,6 +2154,7 @@ mipsfpu_deps="mips"
 mipsdsp_deps="mips"
 mipsdspr2_deps="mips"
 mips32r2_deps="mips"
+mips32r6_deps="mips"
 mips64r2_deps="mips"
 mips64r6_deps="mips"
 msa_deps="mips"
@@ -2637,7 +2637,6 @@ libshine_encoder_select="audio_frame_queue"
 libspeex_decoder_deps="libspeex"
 libspeex_encoder_deps="libspeex"
 libspeex_encoder_select="audio_frame_queue"
-libstagefright_h264_decoder_deps="libstagefright_h264"
 libtheora_encoder_deps="libtheora"
 libtwolame_encoder_deps="libtwolame"
 libvo_aacenc_encoder_deps="libvo_aacenc"
@@ -3700,7 +3699,8 @@ probe_cc(){
         gcc_ext_ver=$(expr "$gcc_version" : ".*$gcc_pkg_ver $gcc_basever \\(.*\\)")
         _ident=$(cleanws "gcc $gcc_basever $gcc_pkg_ver $gcc_ext_ver")
         case $gcc_basever in
-            2*) ;;
+            2) ;;
+            2.*) ;;
             *) _depflags='-MMD -MF $(@:.o=.d) -MT $@' ;;
         esac
         if [ "$first" = true ]; then
@@ -3979,6 +3979,17 @@ if test "$cpu" = host; then
             }
             cpu=$(check_native -march || check_native -mcpu)
         ;;
+        clang)
+            check_native(){
+                $cc $1=native -v -c -o $TMPO $TMPC >$TMPE 2>&1 || return
+                sed -n "/cc1.*-target-cpu /{
+                            s/.*-target-cpu \\([^ ]*\\).*/\\1/
+                            p
+                            q
+                        }" $TMPE
+            }
+            cpu=$(check_native -march)
+        ;;
     esac
 
     test "${cpu:-host}" = host &&
@@ -4130,6 +4141,7 @@ elif enabled mips; then
 
     case $cpu in
         24kc)
+            disable mips32r6
             disable mips64r2
             disable mips64r6
             disable mipsfpu
@@ -4138,6 +4150,7 @@ elif enabled mips; then
             disable msa
         ;;
         24kf*)
+            disable mips32r6
             disable mips64r2
             disable mips64r6
             disable mipsdsp
@@ -4145,6 +4158,7 @@ elif enabled mips; then
             disable msa
         ;;
         24kec|34kc|1004kc)
+            disable mips32r6
             disable mips64r2
             disable mips64r6
             disable mipsfpu
@@ -4152,23 +4166,27 @@ elif enabled mips; then
             disable msa
         ;;
         24kef*|34kf*|1004kf*)
+            disable mips32r6
             disable mips64r2
             disable mips64r6
             disable mipsdspr2
             disable msa
         ;;
         74kc)
+            disable mips32r6
             disable mips64r2
             disable mips64r6
             disable mipsfpu
             disable msa
         ;;
         74kf)
+            disable mips32r6
             disable mips64r2
             disable mips64r6
             disable msa
         ;;
         p5600)
+            disable mips32r6
             disable mips64r2
             disable mips64r6
             disable mipsdsp
@@ -4179,6 +4197,7 @@ elif enabled mips; then
         ;;
         i6400)
             disable mips32r2
+            disable mips32r6
             disable mips64r2
             disable mipsdsp
             disable mipsdspr2
@@ -4188,10 +4207,11 @@ elif enabled mips; then
             add_asflags "-mfp64"
         ;;
         loongson*)
-            disable mipsfpu
             disable mips32r2
+            disable mips32r6
             disable mips64r2
             disable mips64r6
+            disable mipsfpu
             disable mipsdsp
             disable mipsdspr2
             disable msa
@@ -4219,8 +4239,11 @@ elif enabled mips; then
             disable msa
         ;;
         *)
+            # Unknown CPU. Disable everything.
+            warn "unknown CPU. Disabling all MIPS optimizations."
             disable mipsfpu
             disable mips32r2
+            disable mips32r6
             disable mips64r2
             disable mips64r6
             disable mipsdsp
@@ -5435,7 +5458,8 @@ enabled libopencore_amrnb && require libopencore_amrnb opencore-amrnb/interf_dec
 enabled libopencore_amrwb && require libopencore_amrwb opencore-amrwb/dec_if.h D_IF_init -lopencore-amrwb
 enabled libopencv         && require_pkg_config opencv opencv/cxcore.h cvCreateImageHeader
 enabled libopenh264       && require_pkg_config openh264 wels/codec_api.h WelsGetCodecVersion
-enabled libopenjpeg       && { check_lib openjpeg.h opj_version -lopenmj2 -DOPJ_STATIC ||
+enabled libopenjpeg       && { check_lib openjpeg-2.1/openjpeg.h opj_version -lopenjp2 -DOPJ_STATIC ||
+                               check_lib openjpeg-2.0/openjpeg.h opj_version -lopenjp2 -DOPJ_STATIC ||
                                check_lib openjpeg-1.5/openjpeg.h opj_version -lopenjpeg -DOPJ_STATIC ||
                                check_lib openjpeg.h opj_version -lopenjpeg -DOPJ_STATIC ||
                                die "ERROR: libopenjpeg not found"; }
@@ -5452,9 +5476,6 @@ enabled libsnappy         && require snappy snappy-c.h snappy_compress -lsnappy
 enabled libsoxr           && require libsoxr soxr.h soxr_create -lsoxr && LIBSOXR="-lsoxr"
 enabled libssh            && require_pkg_config libssh libssh/sftp.h sftp_init
 enabled libspeex          && require_pkg_config speex speex/speex.h speex_decoder_init -lspeex
-enabled libstagefright_h264 && require_cpp libstagefright_h264 "binder/ProcessState.h media/stagefright/MetaData.h
-    media/stagefright/MediaBufferGroup.h media/stagefright/MediaDebug.h media/stagefright/MediaDefs.h
-    media/stagefright/OMXClient.h media/stagefright/OMXCodec.h" android::OMXClient -lstagefright -lmedia -lutils -lbinder -lgnustl_static
 enabled libtesseract      && require_pkg_config tesseract tesseract/capi.h TessBaseAPICreate
 enabled libtheora         && require libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libtwolame        && require libtwolame twolame.h twolame_init -ltwolame &&
@@ -6339,7 +6360,7 @@ cat > $TMPH <<EOF
 #define FFMPEG_CONFIG_H
 #define FFMPEG_CONFIGURATION "$(c_escape $FFMPEG_CONFIGURATION)"
 #define FFMPEG_LICENSE "$(c_escape $license)"
-#define CONFIG_THIS_YEAR 2015
+#define CONFIG_THIS_YEAR 2016
 #define FFMPEG_DATADIR "$(eval c_escape $datadir)"
 #define AVCONV_DATADIR "$(eval c_escape $datadir)"
 #define CC_IDENT "$(c_escape ${cc_ident:-Unknown compiler})"

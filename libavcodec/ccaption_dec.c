@@ -21,7 +21,6 @@
 
 #include "avcodec.h"
 #include "ass.h"
-#include "libavutil/internal.h"
 #include "libavutil/opt.h"
 
 #define SCREEN_ROWS 15
@@ -146,9 +145,8 @@ struct Screen {
      * for setting row 1  use row | (1 << 0)
      * for setting row 15 use row | (1 << 14)
      */
-    int16_t  row_used;
+    int16_t row_used;
 };
-
 
 typedef struct CCaptionSubContext {
     AVClass *class;
@@ -169,7 +167,7 @@ typedef struct CCaptionSubContext {
     char prev_cmd[2];
     /* buffer to store pkt data */
     AVBufferRef *pktbuf;
-}CCaptionSubContext;
+} CCaptionSubContext;
 
 
 static av_cold int init_decoder(AVCodecContext *avctx)
@@ -182,12 +180,12 @@ static av_cold int init_decoder(AVCodecContext *avctx)
     ctx->mode = CCMODE_ROLLUP_2;
     ctx->rollup = 2;
     ret = ff_ass_subtitle_header_default(avctx);
-    if(ret < 0) {
+    if (ret < 0) {
         return ret;
     }
     /* allocate pkt buffer */
     ctx->pktbuf = av_buffer_alloc(128);
-    if( !ctx->pktbuf) {
+    if (!ctx->pktbuf) {
         ret = AVERROR(ENOMEM);
     }
     return ret;
@@ -196,7 +194,7 @@ static av_cold int init_decoder(AVCodecContext *avctx)
 static av_cold int close_decoder(AVCodecContext *avctx)
 {
     CCaptionSubContext *ctx = avctx->priv_data;
-    av_bprint_finalize( &ctx->buffer, NULL);
+    av_bprint_finalize(&ctx->buffer, NULL);
     av_buffer_unref(&ctx->pktbuf);
     return 0;
 }
@@ -204,14 +202,14 @@ static av_cold int close_decoder(AVCodecContext *avctx)
 /**
  * @param ctx closed caption context just to print log
  */
-static int write_char (CCaptionSubContext *ctx, char *row,uint8_t col, char ch)
+static int write_char(CCaptionSubContext *ctx, char *row, uint8_t col, char ch)
 {
-    if(col < SCREEN_COLUMNS) {
+    if (col < SCREEN_COLUMNS) {
         row[col] = ch;
         return 0;
     }
     /* We have extra space at end only for null character */
-    else if ( col == SCREEN_COLUMNS && ch == 0) {
+    else if (col == SCREEN_COLUMNS && ch == 0) {
         row[col] = ch;
         return 0;
     }
@@ -228,7 +226,7 @@ static int write_char (CCaptionSubContext *ctx, char *row,uint8_t col, char ch)
  * If the second byte doesn't pass parity, it returns INVALIDDATA
  * user can ignore the whole pair and pass the other pair.
  */
-static int validate_cc_data_pair (uint8_t *cc_data_pair)
+static int validate_cc_data_pair(uint8_t *cc_data_pair)
 {
     uint8_t cc_valid = (*cc_data_pair & 4) >>2;
     uint8_t cc_type = *cc_data_pair & 3;
@@ -247,21 +245,19 @@ static int validate_cc_data_pair (uint8_t *cc_data_pair)
     }
 
     //Skip non-data
-    if( (cc_data_pair[0] == 0xFA || cc_data_pair[0] == 0xFC || cc_data_pair[0] == 0xFD )
+    if ((cc_data_pair[0] == 0xFA || cc_data_pair[0] == 0xFC || cc_data_pair[0] == 0xFD)
          && (cc_data_pair[1] & 0x7F) == 0 && (cc_data_pair[2] & 0x7F) == 0)
         return AVERROR_PATCHWELCOME;
 
     //skip 708 data
-    if(cc_type == 3 || cc_type == 2 )
+    if (cc_type == 3 || cc_type == 2)
         return AVERROR_PATCHWELCOME;
 
     /* remove parity bit */
     cc_data_pair[1] &= 0x7F;
     cc_data_pair[2] &= 0x7F;
 
-
     return 0;
-
 }
 
 static struct Screen *get_writing_screen(CCaptionSubContext *ctx)
@@ -287,7 +283,7 @@ static void roll_up(CCaptionSubContext *ctx)
     struct Screen *screen;
     int i, keep_lines;
 
-    if(ctx->mode == CCMODE_TEXT)
+    if (ctx->mode == CCMODE_TEXT)
         return;
 
     screen = get_writing_screen(ctx);
@@ -297,22 +293,21 @@ static void roll_up(CCaptionSubContext *ctx)
      */
     keep_lines = FFMIN(ctx->cursor_row + 1, ctx->rollup);
 
-    for( i = 0; i < ctx->cursor_row - keep_lines; i++ )
+    for (i = 0; i < ctx->cursor_row - keep_lines; i++)
         UNSET_FLAG(screen->row_used, i);
 
 
-    for( i = 0; i < keep_lines && screen->row_used; i++ ) {
+    for (i = 0; i < keep_lines && screen->row_used; i++) {
         const int i_row = ctx->cursor_row - keep_lines + i + 1;
 
-        memcpy( screen->characters[i_row], screen->characters[i_row+1], SCREEN_COLUMNS );
-        memcpy( screen->colors[i_row], screen->colors[i_row+1], SCREEN_COLUMNS);
-        memcpy( screen->fonts[i_row], screen->fonts[i_row+1], SCREEN_COLUMNS);
-        if(CHECK_FLAG(screen->row_used, i_row + 1))
+        memcpy(screen->characters[i_row], screen->characters[i_row+1], SCREEN_COLUMNS);
+        memcpy(screen->colors[i_row], screen->colors[i_row+1], SCREEN_COLUMNS);
+        memcpy(screen->fonts[i_row], screen->fonts[i_row+1], SCREEN_COLUMNS);
+        if (CHECK_FLAG(screen->row_used, i_row + 1))
             SET_FLAG(screen->row_used, i_row);
 
     }
     UNSET_FLAG(screen->row_used, ctx->cursor_row);
-
 }
 
 static int reap_screen(CCaptionSubContext *ctx, int64_t pts)
@@ -322,9 +317,9 @@ static int reap_screen(CCaptionSubContext *ctx, int64_t pts)
     struct Screen *screen = ctx->screen + ctx->active_screen;
     ctx->start_time = ctx->startv_time;
 
-    for( i = 0; screen->row_used && i < SCREEN_ROWS; i++)
+    for (i = 0; screen->row_used && i < SCREEN_ROWS; i++)
     {
-        if(CHECK_FLAG(screen->row_used,i)) {
+        if (CHECK_FLAG(screen->row_used,i)) {
             char *str = screen->characters[i];
             /* skip space */
             while (*str == ' ')
@@ -332,14 +327,14 @@ static int reap_screen(CCaptionSubContext *ctx, int64_t pts)
 
             av_bprintf(&ctx->buffer, "%s\\N", str);
             ret = av_bprint_is_complete(&ctx->buffer);
-            if( ret == 0) {
+            if (ret == 0) {
                 ret = AVERROR(ENOMEM);
                 break;
             }
         }
 
     }
-    if(screen->row_used && ctx->buffer.len >= 2 ) {
+    if (screen->row_used && ctx->buffer.len >= 2) {
         ctx->buffer.len -= 2;
         ctx->buffer.str[ctx->buffer.len] = 0;
     }
@@ -348,26 +343,26 @@ static int reap_screen(CCaptionSubContext *ctx, int64_t pts)
     return ret;
 }
 
-static void handle_textattr( CCaptionSubContext *ctx, uint8_t hi, uint8_t lo )
+static void handle_textattr(CCaptionSubContext *ctx, uint8_t hi, uint8_t lo)
 {
     int i = lo - 0x20;
     int ret;
     struct Screen *screen = get_writing_screen(ctx);
     char *row = screen->characters[ctx->cursor_row];
 
-    if( i >= 32)
+    if (i >= 32)
         return;
 
-    ctx->cursor_color =  pac2_attribs[i][0];
+    ctx->cursor_color = pac2_attribs[i][0];
     ctx->cursor_font = pac2_attribs[i][1];
 
     SET_FLAG(screen->row_used,ctx->cursor_row);
     ret = write_char(ctx, row, ctx->cursor_column, ' ');
-    if(ret == 0)
+    if (ret == 0)
         ctx->cursor_column++;
 }
 
-static void handle_pac( CCaptionSubContext *ctx, uint8_t hi, uint8_t lo )
+static void handle_pac(CCaptionSubContext *ctx, uint8_t hi, uint8_t lo)
 {
     static const int8_t row_map[] = {
         11, -1, 1, 2, 3, 4, 12, 13, 14, 15, 5, 6, 7, 8, 9, 10
@@ -375,9 +370,9 @@ static void handle_pac( CCaptionSubContext *ctx, uint8_t hi, uint8_t lo )
     const int index = ( (hi<<1) & 0x0e) | ( (lo>>5) & 0x01 );
     struct Screen *screen = get_writing_screen(ctx);
     char *row;
-    int indent,i,ret;
+    int indent, i, ret;
 
-    if( row_map[index] <= 0 ) {
+    if (row_map[index] <= 0) {
         av_log(ctx, AV_LOG_DEBUG,"Invalid pac index encountered\n");
         return;
     }
@@ -390,18 +385,17 @@ static void handle_pac( CCaptionSubContext *ctx, uint8_t hi, uint8_t lo )
     ctx->cursor_column = 0;
     indent = pac2_attribs[lo][2];
     row = screen->characters[ctx->cursor_row];
-    for(i = 0;i < indent; i++) {
+    for (i = 0; i < indent; i++) {
         ret = write_char(ctx, row, ctx->cursor_column, ' ');
-        if(  ret == 0 )
+        if (ret == 0)
             ctx->cursor_column++;
     }
-
 }
 
 /**
  * @param pts it is required to set end time
  */
-static int handle_edm(CCaptionSubContext *ctx,int64_t pts)
+static int handle_edm(CCaptionSubContext *ctx, int64_t pts)
 {
     int ret = 0;
     struct Screen *screen = ctx->screen + ctx->active_screen;
@@ -421,12 +415,11 @@ static int handle_eoc(CCaptionSubContext *ctx, int64_t pts)
     return ret;
 }
 
-static void handle_delete_end_of_row( CCaptionSubContext *ctx, char hi, char lo)
+static void handle_delete_end_of_row(CCaptionSubContext *ctx, char hi, char lo)
 {
     struct Screen *screen = get_writing_screen(ctx);
     char *row = screen->characters[ctx->cursor_row];
     write_char(ctx, row, ctx->cursor_column, 0);
-
 }
 
 static void handle_char(CCaptionSubContext *ctx, char hi, char lo, int64_t pts)
@@ -438,12 +431,12 @@ static void handle_char(CCaptionSubContext *ctx, char hi, char lo, int64_t pts)
     SET_FLAG(screen->row_used,ctx->cursor_row);
 
     ret = write_char(ctx, row, ctx->cursor_column, hi);
-    if( ret == 0 )
+    if (ret == 0)
         ctx->cursor_column++;
 
-    if(lo) {
+    if (lo) {
         ret = write_char(ctx, row, ctx->cursor_column, lo);
-        if ( ret == 0 )
+        if (ret == 0)
             ctx->cursor_column++;
     }
     write_char(ctx, row, ctx->cursor_column, 0);
@@ -452,72 +445,85 @@ static void handle_char(CCaptionSubContext *ctx, char hi, char lo, int64_t pts)
     ctx->prev_cmd[0] = 0;
     ctx->prev_cmd[1] = 0;
     if (lo)
-       ff_dlog(ctx, "(%c,%c)\n",hi,lo);
+       ff_dlog(ctx, "(%c,%c)\n", hi, lo);
     else
-       ff_dlog(ctx, "(%c)\n",hi);
+       ff_dlog(ctx, "(%c)\n", hi);
 }
 
 static int process_cc608(CCaptionSubContext *ctx, int64_t pts, uint8_t hi, uint8_t lo)
 {
     int ret = 0;
-#define COR3(var, with1, with2, with3)  ( (var) == (with1) ||  (var) == (with2) || (var) == (with3) )
-    if ( hi == ctx->prev_cmd[0] && lo == ctx->prev_cmd[1]) {
-    /* ignore redundant command */
+    if (hi == ctx->prev_cmd[0] && lo == ctx->prev_cmd[1]) {
+        /* ignore redundant command */
     } else if ( (hi == 0x10 && (lo >= 0x40 || lo <= 0x5f)) ||
               ( (hi >= 0x11 && hi <= 0x17) && (lo >= 0x40 && lo <= 0x7f) ) ) {
         handle_pac(ctx, hi, lo);
     } else if ( ( hi == 0x11 && lo >= 0x20 && lo <= 0x2f ) ||
                 ( hi == 0x17 && lo >= 0x2e && lo <= 0x2f) ) {
         handle_textattr(ctx, hi, lo);
-    } else if ( COR3(hi, 0x14, 0x15, 0x1C) && lo == 0x20 ) {
-    /* resume caption loading */
-        ctx->mode = CCMODE_POPON;
-    } else if ( COR3(hi, 0x14, 0x15, 0x1C) && lo == 0x24 ) {
-        handle_delete_end_of_row(ctx, hi, lo);
-    } else if ( COR3(hi, 0x14, 0x15, 0x1C) && lo == 0x25 ) {
-        ctx->rollup = 2;
-        ctx->mode = CCMODE_ROLLUP_2;
-    } else if ( COR3(hi, 0x14, 0x15, 0x1C) && lo == 0x26 ) {
-        ctx->rollup = 3;
-        ctx->mode = CCMODE_ROLLUP_3;
-    } else if ( COR3(hi, 0x14, 0x15, 0x1C) && lo == 0x27 ) {
-        ctx->rollup = 4;
-        ctx->mode = CCMODE_ROLLUP_4;
-    } else if ( COR3(hi, 0x14, 0x15, 0x1C) && lo == 0x29 ) {
-    /* resume direct captioning */
-        ctx->mode = CCMODE_PAINTON;
-    } else if ( COR3(hi, 0x14, 0x15, 0x1C) && lo == 0x2B ) {
-    /* resume text display */
-        ctx->mode = CCMODE_TEXT;
-    } else if ( COR3(hi, 0x14, 0x15, 0x1C) && lo == 0x2C ) {
-    /* erase display memory */
-        ret = handle_edm(ctx, pts);
-    } else if ( COR3(hi, 0x14, 0x15, 0x1C) && lo == 0x2D ) {
-    /* carriage return */
-        ff_dlog(ctx, "carriage return\n");
-        reap_screen(ctx, pts);
-        roll_up(ctx);
-        ctx->screen_changed = 1;
-        ctx->cursor_column = 0;
-    } else if ( COR3(hi, 0x14, 0x15, 0x1C) && lo == 0x2F ) {
-    /* end of caption */
-        ff_dlog(ctx, "handle_eoc\n");
-        ret = handle_eoc(ctx, pts);
+    } else if (hi == 0x14 || hi == 0x15 || hi == 0x1c) {
+        switch (lo) {
+        case 0x20:
+            /* resume caption loading */
+            ctx->mode = CCMODE_POPON;
+            break;
+        case 0x24:
+            handle_delete_end_of_row(ctx, hi, lo);
+            break;
+        case 0x25:
+            ctx->rollup = 2;
+            ctx->mode = CCMODE_ROLLUP_2;
+            break;
+        case 0x26:
+            ctx->rollup = 3;
+            ctx->mode = CCMODE_ROLLUP_3;
+            break;
+        case 0x27:
+            ctx->rollup = 4;
+            ctx->mode = CCMODE_ROLLUP_4;
+            break;
+        case 0x29:
+            /* resume direct captioning */
+            ctx->mode = CCMODE_PAINTON;
+            break;
+        case 0x2b:
+            /* resume text display */
+            ctx->mode = CCMODE_TEXT;
+            break;
+        case 0x2c:
+            /* erase display memory */
+            ret = handle_edm(ctx, pts);
+            break;
+        case 0x2d:
+            /* carriage return */
+            ff_dlog(ctx, "carriage return\n");
+            reap_screen(ctx, pts);
+            roll_up(ctx);
+            ctx->screen_changed = 1;
+            ctx->cursor_column = 0;
+            break;
+        case 0x2f:
+            /* end of caption */
+            ff_dlog(ctx, "handle_eoc\n");
+            ret = handle_eoc(ctx, pts);
+            break;
+        default:
+            ff_dlog(ctx, "Unknown command 0x%hhx 0x%hhx\n", hi, lo);
+            break;
+        }
     } else if (hi>=0x20) {
-    /* Standard characters (always in pairs) */
+        /* Standard characters (always in pairs) */
         handle_char(ctx, hi, lo, pts);
     } else {
-    /* Ignoring all other non data code */
+        /* Ignoring all other non data code */
         ff_dlog(ctx, "Unknown command 0x%hhx 0x%hhx\n", hi, lo);
     }
 
     /* set prev command */
-     ctx->prev_cmd[0] = hi;
-     ctx->prev_cmd[1] = lo;
+    ctx->prev_cmd[0] = hi;
+    ctx->prev_cmd[1] = lo;
 
-#undef COR3
     return ret;
-
 }
 
 static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avpkt)
@@ -529,9 +535,9 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     int ret = 0;
     int i;
 
-    if ( ctx->pktbuf->size < len) {
+    if (ctx->pktbuf->size < len) {
         ret = av_buffer_realloc(&ctx->pktbuf, len);
-         if(ret < 0) {
+         if (ret < 0) {
             av_log(ctx, AV_LOG_WARNING, "Insufficient Memory of %d truncated to %d\n",len, ctx->pktbuf->size);
             len = ctx->pktbuf->size;
             ret = 0;
@@ -540,17 +546,16 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     memcpy(ctx->pktbuf->data, avpkt->data, len);
     bptr = ctx->pktbuf->data;
 
-
     for (i  = 0; i < len; i += 3) {
         uint8_t cc_type = *(bptr + i) & 3;
-        if (validate_cc_data_pair( bptr + i) )
+        if (validate_cc_data_pair(bptr + i))
             continue;
         /* ignoring data field 1 */
         if(cc_type == 1)
             continue;
         else
             process_cc608(ctx, avpkt->pts, *(bptr + i + 1) & 0x7f, *(bptr + i + 2) & 0x7f);
-        if(ctx->screen_changed && *ctx->buffer.str)
+        if (ctx->screen_changed && *ctx->buffer.str)
         {
             int start_time = av_rescale_q(ctx->start_time, avctx->time_base, (AVRational){ 1, 100 });
             int end_time = av_rescale_q(ctx->end_time, avctx->time_base, (AVRational){ 1, 100 });

@@ -2,6 +2,7 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+- Common Encryption (CENC) MP4 decoding support
 - Common Encryption (CENC) MP4 encoding support
 - DXV decoding
 - extrastereo filter
@@ -47,6 +48,10 @@ version <next>:
 - DXVA2-accelerated VP9 decoding
 - SOFAlizer: virtual binaural acoustics filter
 - VAAPI VP9 hwaccel
+- audio high-order multiband parametric equalizer
+- automatic bitstream filtering
+- showspectrumpic filter
+- libstagefright support removed
 
 
 version 2.8:

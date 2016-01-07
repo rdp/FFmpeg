@@ -683,47 +683,10 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
     if (bsfc)
         av_packet_split_side_data(pkt);
 
-    while (bsfc) {
-        AVPacket new_pkt = *pkt;
-        AVDictionaryEntry *bsf_arg = av_dict_get(ost->bsf_args,
-                                                 bsfc->filter->name,
-                                                 NULL, 0);
-        int a = av_bitstream_filter_filter(bsfc, avctx,
-                                           bsf_arg ? bsf_arg->value : NULL,
-                                           &new_pkt.data, &new_pkt.size,
-                                           pkt->data, pkt->size,
-                                           pkt->flags & AV_PKT_FLAG_KEY);
-        if(a == 0 && new_pkt.data != pkt->data) {
-            uint8_t *t = av_malloc(new_pkt.size + AV_INPUT_BUFFER_PADDING_SIZE); //the new should be a subset of the old so cannot overflow
-            if(t) {
-                memcpy(t, new_pkt.data, new_pkt.size);
-                memset(t + new_pkt.size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
-                new_pkt.data = t;
-                new_pkt.buf = NULL;
-                a = 1;
-            } else
-                a = AVERROR(ENOMEM);
-        }
-        if (a > 0) {
-            pkt->side_data = NULL;
-            pkt->side_data_elems = 0;
-            av_packet_unref(pkt);
-            new_pkt.buf = av_buffer_create(new_pkt.data, new_pkt.size,
-                                           av_buffer_default_free, NULL, 0);
-            if (!new_pkt.buf)
-                exit_program(1);
-        } else if (a < 0) {
-            new_pkt = *pkt;
-            av_log(NULL, AV_LOG_ERROR, "Failed to open bitstream filter %s for stream %d with codec %s",
-                   bsfc->filter->name, pkt->stream_index,
-                   avctx->codec ? avctx->codec->name : "copy");
-            print_error("", a);
-            if (exit_on_error)
-                exit_program(1);
-        }
-        *pkt = new_pkt;
-
-        bsfc = bsfc->next;
+    if ((ret = av_apply_bitstream_filters(avctx, pkt, bsfc)) < 0) {
+        print_error("", ret);
+        if (exit_on_error)
+            exit_program(1);
     }
 
     if (!(s->oformat->flags & AVFMT_NOTIMESTAMPS)) {
@@ -1538,6 +1501,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
     static int64_t last_time = -1;
     static int qp_histogram[52];
     int hours, mins, secs, us;
+    int ret;
     float t;
 
     if (!print_stats && !is_last_report && !progress_avio)
@@ -1596,7 +1560,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
                 if (qp >= 0 && qp < FF_ARRAY_ELEMS(qp_histogram))
                     qp_histogram[qp]++;
                 for (j = 0; j < 32; j++)
-                    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "%X", (int)lrintf(log2(qp_histogram[j] + 1)));
+                    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "%X", av_log2(qp_histogram[j] + 1));
             }
 
             if ((enc->flags & AV_CODEC_FLAG_PSNR) && (ost->pict_type != AV_PICTURE_TYPE_NONE || is_last_report)) {
@@ -1704,7 +1668,9 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
         avio_flush(progress_avio);
         av_bprint_finalize(&buf_script, NULL);
         if (is_last_report) {
-            avio_closep(&progress_avio);
+            if ((ret = avio_closep(&progress_avio)) < 0)
+                av_log(NULL, AV_LOG_ERROR,
+                       "Error closing progress log, loss of information possible: %s\n", av_err2str(ret));
         }
     }
 
@@ -4244,7 +4210,6 @@ static int transcode(void)
                 av_dict_free(&ost->sws_dict);
                 av_dict_free(&ost->swr_opts);
                 av_dict_free(&ost->resample_opts);
-                av_dict_free(&ost->bsf_args);
             }
         }
     }

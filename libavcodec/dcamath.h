@@ -1,6 +1,4 @@
 /*
- * Generate a header file for hardcoded DSD tables
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -18,21 +16,27 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <stdlib.h>
-#define CONFIG_HARDCODED_TABLES 0
-#include "dsd_tablegen.h"
-#include "tableprint.h"
-#include <inttypes.h>
+#include "libavutil/common.h"
 
-int main(void)
+
+// clip a signed integer into the (-2^23), (2^23-1) range
+static inline int dca_clip23(int a)
 {
-    dsd_ctables_tableinit();
+    return av_clip_intp2(a, 23);
+}
 
-    write_fileheader();
+static inline int32_t dca_norm(int64_t a, int bits)
+{
+    if (bits > 0)
+        return (int32_t)((a + (INT64_C(1) << (bits - 1))) >> bits);
+    else
+        return (int32_t)a;
+}
 
-    printf("static const double ctables[CTABLES][256] = {\n");
-    write_float_2d_array(ctables, CTABLES, 256);
-    printf("};\n");
-
-    return 0;
+static inline int64_t dca_round(int64_t a, int bits)
+{
+    if (bits > 0)
+        return (a + (INT64_C(1) << (bits - 1))) & ~((INT64_C(1) << bits) - 1);
+    else
+        return a;
 }

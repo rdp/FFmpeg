@@ -15,6 +15,12 @@ libavutil:     2015-08-28
 
 API changes, most recent first:
 
+2016-01-01 - xxxxxxx - lavc 57.21.100 / 57.12.0 - avcodec.h
+  Add AVCodecDescriptor.profiles and avcodec_profile_name().
+
+2015-12-28 - xxxxxxx - lavf 57.21.100 - avformat.h
+  Add automatic bitstream filtering; add av_apply_bitstream_filters()
+
 2015-12-22 - xxxxxxx - lavfi 6.21.101 - avfilter.h
   Deprecate avfilter_link_set_closed().
   Applications are not supposed to mess with links,

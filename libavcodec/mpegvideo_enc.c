@@ -78,7 +78,7 @@ static int sse_mb(MpegEncContext *s);
 static void denoise_dct_c(MpegEncContext *s, int16_t *block);
 static int dct_quantize_trellis_c(MpegEncContext *s, int16_t *block, int n, int qscale, int *overflow);
 
-static uint8_t default_mv_penalty[MAX_FCODE + 1][MAX_MV * 2 + 1];
+static uint8_t default_mv_penalty[MAX_FCODE + 1][MAX_DMV * 2 + 1];
 static uint8_t default_fcode_tab[MAX_MV * 2 + 1];
 
 const AVOption ff_mpv_generic_options[] = {
@@ -347,6 +347,7 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         break;
     }
 
+    avctx->bits_per_raw_sample = av_clip(avctx->bits_per_raw_sample, 0, 8);
     s->bit_rate = avctx->bit_rate;
     s->width    = avctx->width;
     s->height   = avctx->height;
