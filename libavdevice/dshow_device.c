@@ -19,7 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "dshow_capture.h"
+#include "libavformat/dshow_capture.h"
+#include "avdevice.h"
 
 static const AVClass dshow_class = {
     .class_name = "dshow indev",
@@ -39,4 +40,3 @@ AVInputFormat ff_dshow_demuxer = {
     .flags          = AVFMT_NOFILE,
     .priv_class     = &dshow_class,
 };
-

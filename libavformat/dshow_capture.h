@@ -22,9 +22,10 @@
 #ifndef AVDEVICE_DSHOW_H
 #define AVDEVICE_DSHOW_H
 
-#define DSHOWDEBUG 0
+#include "avformat.h"
+#include "libavutil/opt.h"
 
-#include "avdevice.h"
+#define DSHOWDEBUG 0
 
 #define COBJMACROS
 #define WIN32_LEAN_AND_MEAN
@@ -384,7 +385,6 @@ dshow_frame_callback(void *priv_data, int index, uint8_t *buf, int buf_size, int
 void dshow_log_signal_strength(AVFormatContext *h, int level);
 
 extern const AVOption dshow_options[];
-extern AVInputFormat ff_dshow_demuxer;
 
 int dshow_read_header(AVFormatContext *avctx);
 int dshow_read_packet(AVFormatContext *avctx, AVPacket *pkt);

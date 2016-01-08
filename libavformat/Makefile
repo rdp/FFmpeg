@@ -521,6 +521,9 @@ OBJS-$(CONFIG_CACHE_PROTOCOL)            += cache.o
 OBJS-$(CONFIG_CONCAT_PROTOCOL)           += concat.o
 OBJS-$(CONFIG_CRYPTO_PROTOCOL)           += crypto.o
 OBJS-$(CONFIG_DATA_PROTOCOL)             += data_uri.o
+OBJS-$(CONFIG_DSHOW_PROTOCOL)            += dshow_crossbar.o dshow.o dshow_enummediatypes.o \
+                                            dshow_enumpins.o dshow_filter.o \
+                                            dshow_pin.o dshow_common.o dshow_dtv.o dshow_protocol.o
 OBJS-$(CONFIG_FFRTMPCRYPT_PROTOCOL)      += rtmpcrypt.o rtmpdh.o
 OBJS-$(CONFIG_FFRTMPHTTP_PROTOCOL)       += rtmphttp.o
 OBJS-$(CONFIG_FILE_PROTOCOL)             += file.o
@@ -558,6 +561,9 @@ OBJS-$(HAVE_LIBC_MSVCRT)                 += file_open.o
 
 # libavdevice dependencies
 OBJS-$(CONFIG_IEC61883_INDEV)            += dv.o
+OBJS-$(CONFIG_DSHOW_INDEV)               += dshow_crossbar.o dshow.o dshow_enummediatypes.o \
+                                            dshow_enumpins.o dshow_filter.o \
+                                            dshow_pin.o dshow_common.o dshow_dtv.o
 
 # Windows resource file
 SLIBOBJS-$(HAVE_GNU_WINDRES)             += avformatres.o
