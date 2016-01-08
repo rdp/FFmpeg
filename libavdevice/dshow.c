@@ -30,9 +30,6 @@
 #include "objidl.h"
 #include "shlwapi.h"
 #include "bdamedia.h" // KSDATAFORMAT...
-#include "libavformat/url.h"
-#include "libavutil/avstring.h" // avstrstart
-#include "libavutil/avassert.h"
 
 static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
 {
@@ -61,7 +58,7 @@ static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
     return out;
 }
 
-static int
+int
 dshow_read_close(AVFormatContext *s)
 {
     struct dshow_ctx *ctx = s->priv_data;
@@ -1175,7 +1172,7 @@ static int parse_device_name(AVFormatContext *avctx)
     return ret;
 }
 
-static int dshow_read_header(AVFormatContext *avctx)
+int dshow_read_header(AVFormatContext *avctx)
 {
     struct dshow_ctx *ctx = avctx->priv_data;
     IGraphBuilder *graph = NULL;
@@ -1372,7 +1369,7 @@ static int dshow_check_event_queue(IMediaEvent *media_event)
     return ret;
 }
 
-static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
+int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     struct dshow_ctx *ctx = s->priv_data;
     AVPacketList *pktl = NULL;
@@ -1400,70 +1397,6 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     return ctx->eof ? AVERROR(EIO) : pkt->size;
-}
-
-AVInputFormat ff_dshow_demuxer;
-static int dshow_url_open(URLContext *h, const char *filename, int flags)
-{
-    struct dshow_ctx *ctx = h->priv_data;
-    int r;
-    
-    if (!(ctx->protocol_av_format_context = avformat_alloc_context()))
-     return AVERROR(ENOMEM);
-    ctx->protocol_av_format_context->flags = h->flags; 
-
-    av_strstart(filename, "dshowbda:", &filename); // remove prefix "dshowbda:"
-    if (filename)
-      av_strlcpy(ctx->protocol_av_format_context->filename, filename, 1024); // 1024 max bytes
-    ctx->protocol_av_format_context->iformat = &ff_dshow_demuxer;
-    ctx->protocol_latest_packet = av_packet_alloc();
-    ctx->protocol_latest_packet->pos = 0; // default is -1
-    if (!ctx->protocol_latest_packet)
-      return AVERROR(ENOMEM);
-    ctx->protocol_av_format_context->priv_data = ctx; // a bit circular, but needed to pass through the settings
-    r = dshow_read_header(ctx->protocol_av_format_context);
-    if (r == S_OK)
-        dshow_log_signal_strength(ctx->protocol_av_format_context, AV_LOG_INFO);
-    return r;
-}
-
-static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size) 
-{
-    struct dshow_ctx *ctx = h->priv_data;
-    int packet_size_or_fail;
-    int bytes_to_copy;
-    int bytes_left = ctx->protocol_latest_packet->size - ctx->protocol_latest_packet->pos;
-
-    if (bytes_left == 0) {
-      av_packet_unref(ctx->protocol_latest_packet);
-      packet_size_or_fail = dshow_read_packet(ctx->protocol_av_format_context, ctx->protocol_latest_packet);
-      if (packet_size_or_fail < 0) 
-        return packet_size_or_fail;
-      av_assert0(ctx->protocol_latest_packet->stream_index == 0); // this should be a stream based, so only one stream, so always index 0
-      av_assert0(packet_size_or_fail == ctx->protocol_latest_packet->size); // should match...
-      ctx->protocol_latest_packet->pos = 0; // default is -1
-      bytes_left = ctx->protocol_latest_packet->size - ctx->protocol_latest_packet->pos;
-      av_log(h, AV_LOG_DEBUG, "dshow_url_read read packet of size %d\n", ctx->protocol_latest_packet->size);
-    }
-    bytes_to_copy = FFMIN(bytes_left, max_size);
-    if (bytes_to_copy != bytes_left)
-        av_log(h, AV_LOG_DEBUG, "passing partial dshow packet %d > %d\n", bytes_left, max_size);
-    memcpy(buf, &ctx->protocol_latest_packet->data[ctx->protocol_latest_packet->pos], bytes_to_copy);
-    ctx->protocol_latest_packet->pos += bytes_to_copy; 
-    if (ctx->video_frame_num % (30*60) == 0) { // once/min
-      dshow_log_signal_strength(ctx->protocol_av_format_context, AV_LOG_VERBOSE);
-    }
-    return bytes_to_copy;;
-}
-
-static int dshow_url_close(URLContext *h)
-{
-    struct dshow_ctx *ctx = h->priv_data;
-    int ret = dshow_read_close(ctx->protocol_av_format_context);
-    ctx->protocol_av_format_context->priv_data = NULL; // just in case it would be freed below
-    avformat_free_context(ctx->protocol_av_format_context);
-    av_packet_free(&ctx->protocol_latest_packet); // also does an unref
-    return ret;
 }
 
 #define OFFSET(x) offsetof(struct dshow_ctx, x)
@@ -1510,7 +1443,7 @@ static const AVOption options[] = {
     { NULL },
 };
 
-static const AVClass dshow_class = {
+const AVClass dshow_class = {
     .class_name = "dshow indev",
     .item_name  = av_default_item_name,
     .option     = options,
@@ -1527,17 +1460,5 @@ AVInputFormat ff_dshow_demuxer = {
     .read_close     = dshow_read_close,
     .flags          = AVFMT_NOFILE,
     .priv_class     = &dshow_class,
-};
-
-
-URLProtocol ff_dshow_protocol = {
-    .name                = "dshowbda",
-    .url_open            = dshow_url_open,
-    .url_read            = dshow_url_read,
-    .url_write           = NULL, // none yet
-    .url_close           = dshow_url_close,
-    .priv_data_size      = sizeof(struct dshow_ctx),
-    .priv_data_class     = &dshow_class,
-    .flags               = 0, // doesn't use network, no nested naming schema
 };
 

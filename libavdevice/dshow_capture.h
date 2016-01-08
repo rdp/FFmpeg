@@ -383,4 +383,13 @@ dshow_frame_callback(void *priv_data, int index, uint8_t *buf, int buf_size, int
 
 void dshow_log_signal_strength(AVFormatContext *h, int level);
 
+extern AVInputFormat ff_dshow_demuxer;
+extern const AVClass dshow_class;
+
+int dshow_read_header(AVFormatContext *avctx);
+int dshow_read_packet(AVFormatContext *avctx, AVPacket *pkt);
+int dshow_read_close(AVFormatContext *avctx);
+
+void go_temp(void);
+
 #endif /* AVDEVICE_DSHOW_H */

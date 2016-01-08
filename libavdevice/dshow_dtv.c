@@ -21,7 +21,7 @@
 
 #include "dshow_capture.h"
 #include <tuner.h>
-#include <uuids.h>
+//#include <uuids.h>
 
 // local defines:
 static const CLSID CLSID_NetworkProvider =
@@ -835,6 +835,7 @@ void dshow_log_signal_strength(AVFormatContext *h, int level) {
     struct dshow_ctx *ctx = h->priv_data;
     long signal_strength;
     int hr;
+    go_temp(); // linking purposes only :|
     hr = ITuner_get_SignalStrength(ctx->scanning_tuner, &signal_strength);
     if (hr == S_OK)
       av_log(h, level, "signal strength %ld (freq=%ld) (atsc_channel=%d)\n", signal_strength, ctx->tune_freq, ctx->atsc_physical_channel);
