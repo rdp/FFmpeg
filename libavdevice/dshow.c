@@ -1443,22 +1443,3 @@ const AVOption dshow_options[] = {
     { NULL },
 };
 
-static const AVClass dshow_class = {
-    .class_name = "dshow indev",
-    .item_name  = av_default_item_name,
-    .option     = dshow_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_DEVICE_VIDEO_INPUT,
-};
-
-AVInputFormat ff_dshow_demuxer = {
-    .name           = "dshow",
-    .long_name      = NULL_IF_CONFIG_SMALL("DirectShow capture"),
-    .priv_data_size = sizeof(struct dshow_ctx),
-    .read_header    = dshow_read_header,
-    .read_packet    = dshow_read_packet,
-    .read_close     = dshow_read_close,
-    .flags          = AVFMT_NOFILE,
-    .priv_class     = &dshow_class,
-};
-

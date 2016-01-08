@@ -36,7 +36,7 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
     av_strstart(filename, "dshowbda:", &filename); // remove prefix "dshowbda:"
     if (filename)
       av_strlcpy(ctx->protocol_av_format_context->filename, filename, 1024); // 1024 max bytes
-    ctx->protocol_av_format_context->iformat = &ff_dshow_demuxer; // better logging
+    ctx->protocol_av_format_context->iformat = &ff_dshow_demuxer; // avformat
     ctx->protocol_latest_packet = av_packet_alloc();
     ctx->protocol_latest_packet->pos = 0; // default is -1
     if (!ctx->protocol_latest_packet)
