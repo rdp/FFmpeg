@@ -36,7 +36,7 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
     av_strstart(filename, "dshowbda:", &filename); // remove prefix "dshowbda:"
     if (filename)
       av_strlcpy(ctx->protocol_av_format_context->filename, filename, 1024); // 1024 max bytes
-    ctx->protocol_av_format_context->iformat = &ff_dshow_demuxer;
+    ctx->protocol_av_format_context->iformat = &ff_dshow_demuxer; // better logging
     ctx->protocol_latest_packet = av_packet_alloc();
     ctx->protocol_latest_packet->pos = 0; // default is -1
     if (!ctx->protocol_latest_packet)
@@ -89,6 +89,14 @@ static int dshow_url_close(URLContext *h)
 
 void go_temp(void) {} // for linking purposes for now
 
+static const AVClass dshow_protocol_class = {
+    .class_name = "dshow protocol (stream)",
+    .item_name  = av_default_item_name,
+    .option     = dshow_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_DEVICE_VIDEO_INPUT,
+};
+
 URLProtocol ff_dshow_protocol = {
     .name                = "dshowbda",
     .url_open            = dshow_url_open,
@@ -96,7 +104,7 @@ URLProtocol ff_dshow_protocol = {
     .url_write           = NULL, // none yet
     .url_close           = dshow_url_close,
     .priv_data_size      = sizeof(struct dshow_ctx),
-    .priv_data_class     = &dshow_class,
+    .priv_data_class     = &dshow_protocol_class,
     .flags               = 0, // doesn't use network, no nested naming schema
 };
 
