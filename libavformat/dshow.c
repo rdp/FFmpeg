@@ -1427,6 +1427,7 @@ const AVOption dshow_options[] = {
     { "audio_device_save", "save audio capture filter device (and properties) to file", OFFSET(audio_filter_save_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "video_device_load", "load video capture filter device (and properties) from file", OFFSET(video_filter_load_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "video_device_save", "save video capture filter device (and properties) to file", OFFSET(video_filter_save_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+	// XX dtv -> something else
     { "dtv", "use digital tuner instead of analog", OFFSET(dtv), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 4, DEC, "dtv" }, // NB you can use letters here, not just numbers
     { "c", "DVB-C", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "dtv" },
     { "t", "DVB-T", 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, DEC, "dtv" },

@@ -831,14 +831,15 @@ fail1:
     return 0;
 }
 
-void dshow_log_signal_strength(AVFormatContext *h, int level) {
+long dshow_get_signal_strength(AVFormatContext *h) {
     struct dshow_ctx *ctx = h->priv_data;
-    long signal_strength;
+	long signal_strength;
     int hr;
-    go_temp(); // linking purposes only :|
     hr = ITuner_get_SignalStrength(ctx->scanning_tuner, &signal_strength);
     if (hr == S_OK)
-      av_log(h, level, "signal strength %ld (freq=%ld) (atsc_channel=%d)\n", signal_strength, ctx->tune_freq, ctx->atsc_physical_channel);
-    else
+       return signal_strength;
+    else {
       av_log(h, AV_LOG_ERROR, "unable to determine signal strength (%d)\n", hr);
+	  return 0;
+	}
 }
