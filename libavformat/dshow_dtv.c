@@ -523,7 +523,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 av_log(avctx, AV_LOG_ERROR, "Could not set modulation %d\n", ctx->dtv_tune_modulation);
                 goto error;
             }
-            av_log(avctx, AV_LOG_DEBUG, "Success set modulation type %d, QPSK=%d\n", ctx->dtv_tune_modulation, BDA_MOD_QPSK);			
+            av_log(avctx, AV_LOG_DEBUG, "Success set modulation type %\n", ctx->dtv_tune_modulation, BDA_MOD_QPSK);			
 			
 			
 		}
