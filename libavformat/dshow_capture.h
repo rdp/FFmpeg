@@ -328,6 +328,7 @@ struct dshow_ctx {
     long  tune_freq;
     int   dvbt_tune_bandwidth_mhz;
     int   atsc_physical_channel;
+	int   dtv_tune_modulation;
     char *dump_raw_bytes_file;
 
     IBaseFilter *device_filter[2];

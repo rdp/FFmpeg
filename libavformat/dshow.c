@@ -755,7 +755,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     IPersistStream *pers_stream = NULL;
     enum dshowDeviceType otherDevType = (devtype == VideoDevice) ? AudioDevice : VideoDevice;
 
-    const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
+    const wchar_t *filter_name[2] = { L"Audio dshow capture filter", L"Video dshow capture filter" };
 
     if ( ((ctx->audio_filter_load_file) && (strlen(ctx->audio_filter_load_file)>0) && (sourcetype == AudioSourceDevice)) ||
             ((ctx->video_filter_load_file) && (strlen(ctx->video_filter_load_file)>0) && (sourcetype == VideoSourceDevice)) ) {
@@ -1436,7 +1436,8 @@ const AVOption dshow_options[] = {
     // TODO prefix all with dtv
     { "tune_freq", "set channel frequency (kHz)", OFFSET(tune_freq), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "dvbt_tune_bandwidth_mhz", "specify DVB-T bandwidth (MHz, typically 7 or 8)", OFFSET(dvbt_tune_bandwidth_mhz), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
-    { "atsc_physical_channel", "set ATSC physical (not virtual) channel (like 44)", OFFSET(atsc_physical_channel), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "atsc_physical_channel", "set ATSC physical (not virtual) channel (ex: 44)", OFFSET(atsc_physical_channel), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "dtv_tune_modulation", "specify a specific tune modulation (ex: 20 for QPSK) see msdn ModulationType", OFFSET(dtv_tune_modulation), AV_OPT_TYPE_INT, {.i64 = 0}, 0, BDA_MOD_MAX, DEC },
     { "receiver_component", "BDA receive component filter name", OFFSET(receiver_component), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "dump_graph_filename", "save dtv graph to file", OFFSET(dtv_graph_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "dump_raw_bytes_filename", "save incoming bytes verbatim to file", OFFSET(dump_raw_bytes_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },

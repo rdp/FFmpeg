@@ -74,7 +74,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
         IGraphBuilder *graph = ctx->graph;
         ILocator *locator_used;
 
-        const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
+        const wchar_t *filter_name[2] = { L"Audio capture filter unused", L"DTV Video capture filter" };
 
         r = CoCreateInstance(&CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER,
                              &IID_ICreateDevEnum, (void **) &devenum);
@@ -516,6 +516,17 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             av_log(avctx, AV_LOG_ERROR, "unknown tuning type %d\n", ctx->dtv);
             goto error;
         }
+		
+		if (ctx->dtv_tune_modulation > 0) {
+           r = ILocator_put_Modulation(locator_used, ctx->dtv_tune_modulation);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not set modulation %d\n", ctx->dtv_tune_modulation);
+                goto error;
+            }
+            av_log(avctx, AV_LOG_DEBUG, "Success set modulation type %d, QPSK=%d\n", ctx->dtv_tune_modulation, BDA_MOD_QPSK);			
+			
+			
+		}
         
         if (ctx->tune_freq>0){
             r = ILocator_put_CarrierFrequency(locator_used, ctx->tune_freq );
@@ -523,7 +534,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 av_log(avctx, AV_LOG_ERROR, "Could not set tune freq %ld\n", ctx->tune_freq);
                 goto error;
             }
-            av_log(avctx, AV_LOG_DEBUG, "Success set tune_freq\n");
+            av_log(avctx, AV_LOG_DEBUG, "Success assigning tune_freq %ld\n", ctx->tune_freq);
         }
 
         r = ITuneRequest_put_Locator(tune_request, locator_used);
