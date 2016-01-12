@@ -24,10 +24,13 @@
 #include "libavutil/avstring.h"
 #include "libavutil/avassert.h"
 
+static int dshow_url_close(URLContext *h);
+
 static int dshow_url_open(URLContext *h, const char *filename, int flags)
 {
     struct dshow_ctx *ctx = h->priv_data;
     int r;
+	long signal_strength;
     
     if (!(ctx->protocol_av_format_context = avformat_alloc_context()))
      return AVERROR(ENOMEM);
@@ -37,13 +40,19 @@ static int dshow_url_open(URLContext *h, const char *filename, int flags)
     if (filename)
       av_strlcpy(ctx->protocol_av_format_context->filename, filename, 1024); // 1024 max bytes
     ctx->protocol_latest_packet = av_packet_alloc();
-    ctx->protocol_latest_packet->pos = 0; // default is -1
     if (!ctx->protocol_latest_packet)
       return AVERROR(ENOMEM);
-    ctx->protocol_av_format_context->priv_data = ctx; // a bit circular, but needed to pass through the settings
+    ctx->protocol_latest_packet->pos = 0; // default is -1, we want 0
+    ctx->protocol_av_format_context->priv_data = ctx; // a bit circular, but need to pass through the settings
     r = dshow_read_header(ctx->protocol_av_format_context);
-    if (r == S_OK)
-        dshow_log_signal_strength(ctx->protocol_av_format_context, AV_LOG_INFO);
+    if (r == S_OK) {
+        signal_strength = dshow_get_signal_strength(ctx->protocol_av_format_context);
+		if (signal_strength == 0 && ctx->dtv > 0) {
+			av_log(h, AV_LOG_ERROR, "unable to receive channel freq=%ld?\n", ctx->tune_freq);
+			dshow_url_close(h);
+			return AVERROR(EIO);
+		}
+	}
     return r;
 }
 
@@ -71,7 +80,8 @@ static int dshow_url_read(URLContext *h, uint8_t *buf, int max_size)
     memcpy(buf, &ctx->protocol_latest_packet->data[ctx->protocol_latest_packet->pos], bytes_to_copy);
     ctx->protocol_latest_packet->pos += bytes_to_copy; 
     if (ctx->video_frame_num % (30*60) == 0) { // once/min
-      dshow_log_signal_strength(ctx->protocol_av_format_context, AV_LOG_VERBOSE);
+      long signal_strength = dshow_get_signal_strength(ctx->protocol_av_format_context);
+	  av_log(h, AV_LOG_VERBOSE, "current signal strength %ld freq=%ld atsc_channel=%d\n", signal_strength, ctx->tune_freq, ctx->atsc_physical_channel);
     }
     return bytes_to_copy;;
 }
@@ -85,8 +95,6 @@ static int dshow_url_close(URLContext *h)
     av_packet_free(&ctx->protocol_latest_packet); // also does an unref
     return ret;
 }
-
-void go_temp(void) {} // for linking purposes for now
 
 static const AVClass dshow_protocol_class = {
     .class_name = "dshow protocol (stream)",

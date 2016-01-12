@@ -1431,15 +1431,17 @@ const AVOption dshow_options[] = {
     { "audio_device_save", "save audio capture filter device (and properties) to file", OFFSET(audio_filter_save_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "video_device_load", "load video capture filter device (and properties) from file", OFFSET(video_filter_load_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "video_device_save", "save video capture filter device (and properties) to file", OFFSET(video_filter_save_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
-    { "dtv", "use digital tuner instead of analog", OFFSET(dtv), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 4, DEC, "dtv" }, // NB you can use letters here, not just numbers
+	// XX dtv -> dtv_type [split entirely? do we share pin cycling still tho?] I could see splitting it if we're forced to go protocol...
+    { "dtv", "use digital tuner, type", OFFSET(dtv), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 4, DEC, "dtv" },
     { "c", "DVB-C", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "dtv" },
     { "t", "DVB-T", 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, DEC, "dtv" },
     { "s", "DVB-S", 0, AV_OPT_TYPE_CONST, {.i64=3}, 0, 0, DEC, "dtv" },
     { "a", "ATSC", 0, AV_OPT_TYPE_CONST, {.i64=4}, 0, 0, DEC, "dtv" },
-    // TODO prefix all with dtv
+    // TODO prefix some with dtv
     { "tune_freq", "set channel frequency (kHz)", OFFSET(tune_freq), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "dvbt_tune_bandwidth_mhz", "specify DVB-T bandwidth (MHz, typically 7 or 8)", OFFSET(dvbt_tune_bandwidth_mhz), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
-    { "atsc_physical_channel", "set ATSC physical (not virtual) channel (like 44)", OFFSET(atsc_physical_channel), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "atsc_physical_channel", "set ATSC physical (not virtual) channel (ex: 44)", OFFSET(atsc_physical_channel), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "dtv_tune_modulation", "specify a specific tune modulation (ex: 20 for QPSK) see msdn ModulationType", OFFSET(dtv_tune_modulation), AV_OPT_TYPE_INT, {.i64 = 0}, 0, BDA_MOD_MAX, DEC },
     { "receiver_component", "BDA receive component filter name", OFFSET(receiver_component), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "dump_graph_filename", "save dtv graph to file", OFFSET(dtv_graph_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "dump_raw_bytes_filename", "save incoming bytes verbatim to file", OFFSET(dump_raw_bytes_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },

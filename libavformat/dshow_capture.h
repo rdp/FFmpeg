@@ -328,6 +328,7 @@ struct dshow_ctx {
     long  tune_freq;
     int   dvbt_tune_bandwidth_mhz;
     int   atsc_physical_channel;
+	int   dtv_tune_modulation;
     char *dump_raw_bytes_file;
 
     IBaseFilter *device_filter[2];
@@ -382,14 +383,12 @@ int dshow_add_device(AVFormatContext *avctx, enum dshowDeviceType devtype);
 void
 dshow_frame_callback(void *priv_data, int index, uint8_t *buf, int buf_size, int64_t time, enum dshowDeviceType devtype);
 
-void dshow_log_signal_strength(AVFormatContext *h, int level);
+long dshow_get_signal_strength(AVFormatContext *h);
 
 extern const AVOption dshow_options[];
 
 int dshow_read_header(AVFormatContext *avctx);
 int dshow_read_packet(AVFormatContext *avctx, AVPacket *pkt);
 int dshow_read_close(AVFormatContext *avctx);
-
-void go_temp(void);
 
 #endif /* AVDEVICE_DSHOW_H */
