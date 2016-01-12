@@ -755,7 +755,8 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     IPersistStream *pers_stream = NULL;
     enum dshowDeviceType otherDevType = (devtype == VideoDevice) ? AudioDevice : VideoDevice;
 
-    const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
+    const wchar_t *filter_name[2] = { L"Audio receiving ffmpeg filter", L"Video receiving ffmpeg filter" };
+    const wchar_t *input_filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
 
     if ( ((ctx->audio_filter_load_file) && (strlen(ctx->audio_filter_load_file)>0) && (sourcetype == AudioSourceDevice)) ||
             ((ctx->video_filter_load_file) && (strlen(ctx->video_filter_load_file)>0) && (sourcetype == VideoSourceDevice)) ) {
@@ -799,18 +800,21 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
           IBaseFilter_Release(device_filter);
           device_filter = ctx->device_filter[otherDevType];
           IBaseFilter_AddRef(ctx->device_filter[otherDevType]);
-        } else
-          av_log(avctx, AV_LOG_DEBUG, "not reusing previous graph capture filter %s != %s\n", device_filter_unique_name, ctx->device_unique_name[otherDevType]);
+        } else {
+            av_log(avctx, AV_LOG_DEBUG, "not reusing previous graph capture filter %s != %s\n", device_filter_unique_name, ctx->device_unique_name[otherDevType]);
+        }
     }
-     
+
+    if (device_filter != ctx->device_filter[otherDevType]) {
+        r = IGraphBuilder_AddFilter(graph, device_filter, input_filter_name[devtype]);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not add device filter to graph.\n");
+            goto error;
+        }
+    }
+    
     ctx->device_filter [devtype] = device_filter;
     ctx->device_unique_name [devtype] = device_filter_unique_name;
-
-    r = IGraphBuilder_AddFilter(graph, device_filter, NULL);
-    if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not add device filter to graph.\n");
-        goto error;
-    }
 
     if ((r = dshow_cycle_pins(avctx, devtype, sourcetype, device_filter, &device_pin)) < 0) {
         ret = r;
