@@ -36,7 +36,7 @@ static const CLSID CLSID_BDA_MPEG2_Transport_Information_Filter =
 static int
 dshow_lookup_pin(AVFormatContext *avctx, IBaseFilter *filter, PIN_DIRECTION pin_direction, IPin **discovered_pin, const char *lookup_pin_name, const char *filter_descriptive_text);
 static int
-dshow_cycle_dtv_devices(AVFormatContext *avctx, enum dshowDtvFilterType devtype, ICreateDevEnum *devenum, IBaseFilter **pfilter);
+dshow_cycle_dtv_devices(AVFormatContext *avctx, const GUID *device_guid, const char *sourcetypename, const char *device_name, ICreateDevEnum *devenum, IBaseFilter **pfilter);
 static int
 dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *src_pin_name, IBaseFilter *destination, const char *dest_pin_name, IPin **lookup_pin, const char *lookup_pin_name );
 
@@ -123,9 +123,9 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
 
         if (ctx->list_devices) {
             av_log(avctx, AV_LOG_INFO, "BDA tuners:\n");
-            dshow_cycle_dtv_devices(avctx, NetworkTuner, devenum, NULL);
+            dshow_cycle_dtv_devices(avctx, &KSCATEGORY_BDA_NETWORK_TUNER, "BDA Network Tuner", NULL, devenum, NULL);
             av_log(avctx, AV_LOG_INFO, "BDA receivers:\n");
-            dshow_cycle_dtv_devices(avctx, ReceiverComponent, devenum, NULL);
+            dshow_cycle_dtv_devices(avctx, &KSCATEGORY_BDA_RECEIVER_COMPONENT, "BDA Receiver Component", NULL, devenum, NULL);
             goto error;
         }
 
@@ -217,9 +217,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             goto error;
         }
 
-        //////////////////////////////////////// add network tuner
-        
-        if ((r = dshow_cycle_dtv_devices(avctx, NetworkTuner, devenum, &bda_source_device)) < 0) {
+        if ((r = dshow_cycle_dtv_devices(avctx, &KSCATEGORY_BDA_NETWORK_TUNER, "BDA Network Tuner", NetworkTuner, devenum, &bda_source_device)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "Could not find BDA tuner.\n");
             goto error;
         }
@@ -268,8 +266,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
 
         ///---add receive component if requested
         if (ctx->receiver_component) {
-            // find right named device
-            if ((r = dshow_cycle_dtv_devices(avctx, ReceiverComponent, devenum, &bda_receiver_device)) < 0) {
+            if ((r = dshow_cycle_dtv_devices(avctx, &KSCATEGORY_BDA_RECEIVER_COMPONENT, "BDA Receiver Component", ctx->receiver_component, devenum, &bda_receiver_device)) < 0) {
                 goto error;
             }
 
@@ -710,19 +707,16 @@ dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *
  * If pfilter is NULL, list all device names.
  */
 static int
-dshow_cycle_dtv_devices(AVFormatContext *avctx, enum dshowDtvFilterType devtype, ICreateDevEnum *devenum, IBaseFilter **pfilter)
+dshow_cycle_dtv_devices(AVFormatContext *avctx, const GUID *device_guid, const char *sourcetypename, const char *device_name, ICreateDevEnum *devenum, IBaseFilter **pfilter)
 {
     struct dshow_ctx *ctx = avctx->priv_data;
     IBaseFilter *device_filter = NULL;
     IEnumMoniker *classenum = NULL;
     IMoniker *m = NULL;
-    const char *device_name = (devtype == NetworkTuner) ? ctx->device_name[VideoDevice] : ctx->receiver_component;
     int skip = ctx->video_device_number;
     int r;
 
-    const GUID *device_guid = (devtype == NetworkTuner) ? &KSCATEGORY_BDA_NETWORK_TUNER : &KSCATEGORY_BDA_RECEIVER_COMPONENT;
     const char *devtypename = "dtv";
-    const char *sourcetypename = (devtype == NetworkTuner) ? "BDA Netwok Tuner" : "BDA Receiver Component";
 
     r = ICreateDevEnum_CreateClassEnumerator(devenum, device_guid,
                                              (IEnumMoniker **) &classenum, 0);
