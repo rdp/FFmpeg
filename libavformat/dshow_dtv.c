@@ -73,9 +73,8 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
         int r;
         IGraphBuilder *graph = ctx->graph;
         ILocator *locator_used;
-
         const wchar_t *filter_name[2] = { L"Audio capture filter unused", L"DTV Video capture filter" };
-
+		
         r = CoCreateInstance(&CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER,
                              &IID_ICreateDevEnum, (void **) &devenum);
         if (r != S_OK) {
@@ -83,7 +82,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             goto error;
         }
 
-        ///add microsoft network provider
+        // add network provider
 
         if( ctx->dtv == 1 ) {
             av_log(avctx, AV_LOG_INFO, "NetworkType: DVB-C\n" );
@@ -101,6 +100,10 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             av_log(avctx, AV_LOG_INFO, "Unknown NetworkType: %d\n", ctx->dtv );
             goto error;
         }
+		
+		av_log(avctx, AV_LOG_INFO, "Attempting to setup DTV tuner tune_freq=%ld dvbt_tune_bandwidth_mhz=%d "
+            "atsc_physical_channel=%d dtv_tune_modulation=%d receiver_component=%s\n",		
+		    ctx->tune_freq, ctx->dvbt_tune_bandwidth_mhz, ctx->atsc_physical_channel, ctx->dtv_tune_modulation, ctx->receiver_component);
 
 
         r = CoCreateInstance(&CLSIDNetworkType, NULL, CLSCTX_INPROC_SERVER,
@@ -235,7 +238,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
 
         r = dshow_connect_bda_pins(avctx, bda_net_provider, NULL, bda_source_device, NULL, NULL, NULL);
         if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not connect network provider to tuner. Trying generic Network Provider.\n");
+            av_log(avctx, AV_LOG_ERROR, "Could not connect network provider to tuner. Trying generic Network Provider instead.\n");
             r = IGraphBuilder_RemoveFilter(graph, bda_net_provider);
             if (r != S_OK) {
                 av_log(avctx, AV_LOG_ERROR, "Could not remove old BDA network provider from graph.\n");
@@ -307,7 +310,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             goto error;
         }
         
-        // still need the MS MPEG2 demux and "IB Input" filter to that, so that tuning still occurs
+        // still need the MS MPEG2 demux and "IB Input" filter to that, so that tuning occurs
 
         r = CoCreateInstance(&CLSID_MPEG2Demultiplexer, NULL, CLSCTX_INPROC_SERVER,
                              &IID_IBaseFilter, (void **) &bda_mpeg2_demux);
@@ -363,8 +366,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
 
         /////////////////////////////////
         ///////////////DTV tuning
-
-        av_log(avctx, AV_LOG_INFO, "Using DBA tuning stuff\n");
 
         r = IScanningTuner_get_TuneRequest(scanning_tuner, &tune_request);
         if (r != S_OK) {
@@ -460,7 +461,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             }
             //// if tuningspace  == DVB-S
             if (ctx->dtv==3){
-                // untested
                 r = CoCreateInstance(&CLSID_DVBSLocator, NULL, CLSCTX_INPROC_SERVER,
                                      &IID_IDVBSLocator, (void **) &dvbs_locator);
                 if (r != S_OK) {
@@ -489,7 +489,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 locator_used = (ILocator *) dvbs_locator;
             }
         } else if (ctx->dtv == 4) {
-        //// if tuningspace == ATSC
+            ////  ATSC
 
             r = ITuneRequest_QueryInterface(tune_request, &IID_IATSCChannelTuneRequest, (void **) &atsc_tune_request);
             if (r != S_OK) {
@@ -509,7 +509,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                     av_log(avctx, AV_LOG_ERROR, "Could not specify ATSC physical channel %d\n", ctx->atsc_physical_channel);
                     goto error;
                 }               
-                av_log(avctx, AV_LOG_DEBUG, "Success specify ATSC physical channel %d\n", ctx->atsc_physical_channel);
             }
             locator_used = (ILocator *) atsc_locator;
         } else {
@@ -522,10 +521,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             if (r != S_OK) {
                 av_log(avctx, AV_LOG_ERROR, "Could not set modulation %d\n", ctx->dtv_tune_modulation);
                 goto error;
-            }
-            av_log(avctx, AV_LOG_DEBUG, "Success set modulation type %\n", ctx->dtv_tune_modulation, BDA_MOD_QPSK);			
-			
-			
+            }			
 		}
         
         if (ctx->tune_freq>0){
@@ -534,8 +530,8 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 av_log(avctx, AV_LOG_ERROR, "Could not set tune freq %ld\n", ctx->tune_freq);
                 goto error;
             }
-            av_log(avctx, AV_LOG_DEBUG, "Success assigning tune_freq %ld\n", ctx->tune_freq);
-        }
+        } else
+			av_log(avctx, AV_LOG_ERROR, "no tune frequency requested, will probably be tuning to some default frequency\n");
 
         r = ITuneRequest_put_Locator(tune_request, locator_used);
         if (r != S_OK) {
@@ -554,9 +550,8 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             av_log(avctx, AV_LOG_ERROR, "Could not set put tune request to scanning tuner\n");
             goto error;
         }
-        av_log(avctx, AV_LOG_DEBUG, "success setting tune request type=%d\n", ctx->dtv);
         
-        ////////////////////////////////////////////
+        //////////////////////////////////////////// add to Graph
 
         capture_filter = libAVFilter_Create(avctx, dshow_frame_callback, VideoDevice);
         if (!capture_filter) {
@@ -575,9 +570,6 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
         capture_pin = capture_filter->pin;
         libAVPin_AddRef(capture_filter->pin);
         ctx->capture_pin[VideoDevice] = capture_pin;
-
-        av_log(avctx, AV_LOG_INFO, "Video capture filter added to graph\n");
-
 
         r = CoCreateInstance(&CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
                              &IID_ICaptureGraphBuilder2, (void **) &graph_builder2);
@@ -605,40 +597,18 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
         if (graph_builder2 != NULL)
             ICaptureGraphBuilder2_Release(graph_builder2);
 
-        av_log(avctx, AV_LOG_INFO, "DTV Video capture filter connected\n");
-
         if ((r = dshow_add_device(avctx, VideoDevice)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "Could not add video device.\n");
             goto error;
         }
+		
+		av_log(avctx, AV_LOG_INFO, "DTV Video capture filter successfully added ot graph\n");
 
 error:
         if (devenum)
             ICreateDevEnum_Release(devenum);
         return r;
 }   
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
         
         
 /* dshow_find_pin given a filter, direction and optional pin name, return a ref to that pin

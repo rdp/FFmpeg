@@ -1428,7 +1428,7 @@ const AVOption dshow_options[] = {
     { "video_device_load", "load video capture filter device (and properties) from file", OFFSET(video_filter_load_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "video_device_save", "save video capture filter device (and properties) to file", OFFSET(video_filter_save_file), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
 	// XX dtv -> dtv_type [split entirely? do we share pin cycling still tho?] I could see splitting it if we're forced to go protocol...
-    { "dtv", "use digital tuner, type", OFFSET(dtv), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 4, DEC, "dtv" },
+    { "dtv", "use video as digital tuner, type", OFFSET(dtv), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 4, DEC, "dtv" },
     { "c", "DVB-C", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, DEC, "dtv" },
     { "t", "DVB-T", 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, DEC, "dtv" },
     { "s", "DVB-S", 0, AV_OPT_TYPE_CONST, {.i64=3}, 0, 0, DEC, "dtv" },
