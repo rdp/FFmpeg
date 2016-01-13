@@ -363,6 +363,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
     IReferenceClock *clock = pin->filter->clock;
     REFERENCE_TIME dummy;
+    int r;
     
     dshowdebug("libAVMemInputPin_Receive(%p)\n", this);
 
@@ -380,7 +381,9 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
         /* PTS from video devices is unreliable. */
         IReferenceClock_GetTime(clock, &curtime); // there is some insanity here
     } else {
-        IMediaSample_GetTime(sample, &curtime, &dummy);
+        r = IMediaSample_GetTime(sample, &curtime, &dummy);
+        if (r != S_OK) 
+            av_log(s, AV_LOG_DEBUG, "got failure ret. value from IMediaSample_GetTime %d\n", r);
         curtime += pin->filter->start_time;
         if(curtime > 400000000000000000LL) {
             /* initial frames sometimes start < 0 (shown as a very large number here,
