@@ -483,6 +483,15 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                     av_log(avctx, AV_LOG_ERROR, "Cannot set dvbs tuning space systyp\n");
                     goto error;
                 }
+
+                if (ctx->dvbs_polar) {
+                    r = IDVBSLocator_put_SignalPolarisation(dvbs_locator, ctx->dvbs_polar);
+                    if (r != S_OK) {
+                        av_log(avctx, AV_LOG_ERROR, "Could not set signal polarisation %d\n", ctx->dvbs_polar);
+                        goto error;
+                    }
+                }
+
                 locator_used = (ILocator *) dvbs_locator;
             }
         } else if (ctx->dtv == 4) {
@@ -505,22 +514,38 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 if (r != S_OK) {
                     av_log(avctx, AV_LOG_ERROR, "Could not specify ATSC physical channel %d\n", ctx->atsc_physical_channel);
                     goto error;
-                }               
+                }
             }
             locator_used = (ILocator *) atsc_locator;
         } else {
             av_log(avctx, AV_LOG_ERROR, "unknown tuning type %d\n", ctx->dtv);
             goto error;
         }
-		
-		if (ctx->dtv_tune_modulation > 0) {
+
+        if (ctx->dtv_tune_modulation > -2) {
            r = ILocator_put_Modulation(locator_used, ctx->dtv_tune_modulation);
             if (r != S_OK) {
                 av_log(avctx, AV_LOG_ERROR, "Could not set modulation %d\n", ctx->dtv_tune_modulation);
                 goto error;
-            }			
-		}
-        
+            }
+        }
+
+        if (ctx->dtv_fec > -2) {
+           r = ILocator_put_InnerFECRate(locator_used, ctx->dtv_fec);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not set inner FEC rate %d\n", ctx->dtv_fec);
+                goto error;
+            }
+        }
+
+        if (ctx->dtv_sr > 0) {
+           r = ILocator_put_SymbolRate(locator_used, ctx->dtv_sr);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not set symbol rate %d\n", ctx->dtv_sr);
+                goto error;
+            }
+        }
+
         if (ctx->tune_freq>0){
             r = ILocator_put_CarrierFrequency(locator_used, ctx->tune_freq );
             if (r != S_OK) {
@@ -528,7 +553,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
                 goto error;
             }
         } else
-			av_log(avctx, AV_LOG_ERROR, "no tune frequency requested, will probably be tuning to some default frequency\n");
+            av_log(avctx, AV_LOG_ERROR, "no tune frequency requested, will probably be tuning to default frequency\n");
 
         r = ITuneRequest_put_Locator(tune_request, locator_used);
         if (r != S_OK) {
@@ -598,8 +623,8 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             av_log(avctx, AV_LOG_ERROR, "Could not add video device.\n");
             goto error;
         }
-		
-		av_log(avctx, AV_LOG_INFO, "DTV Video capture filter successfully added ot graph\n");
+
+        av_log(avctx, AV_LOG_INFO, "DTV Video capture filter successfully added ot graph\n");
 
 error:
         if (devenum)
