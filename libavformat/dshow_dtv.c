@@ -217,7 +217,7 @@ HRESULT setup_dshow_dtv(AVFormatContext *avctx) {
             goto error;
         }
 
-        if ((r = dshow_cycle_dtv_devices(avctx, &KSCATEGORY_BDA_NETWORK_TUNER, "BDA Network Tuner", NetworkTuner, devenum, &bda_source_device)) < 0) {
+        if ((r = dshow_cycle_dtv_devices(avctx, &KSCATEGORY_BDA_NETWORK_TUNER, "BDA Network Tuner", ctx->device_name[VideoDevice], devenum, &bda_source_device)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "Could not find BDA tuner.\n");
             goto error;
         }
