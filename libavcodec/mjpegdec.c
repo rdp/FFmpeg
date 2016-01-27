@@ -999,7 +999,7 @@ static int ljpeg_decode_rgb_scan(MJpegDecodeContext *s, int nb_components, int p
                     return -1;
 
                 left[i] = buffer[mb_x][i] =
-                    mask & (pred + (dc << point_transform));
+                    mask & (pred + (dc * (1 << point_transform)));
             }
 
             if (s->restart_interval && !--s->restart_count) {
@@ -1968,7 +1968,7 @@ int ff_mjpeg_find_marker(MJpegDecodeContext *s,
         while (b < t) {
             uint8_t x = src[b++];
             put_bits(&pb, 8, x);
-            if (x == 0xFF) {
+            if (x == 0xFF && b < t) {
                 x = src[b++];
                 if (x & 0x80) {
                     av_log(s->avctx, AV_LOG_WARNING, "Invalid escape sequence\n");

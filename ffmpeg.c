@@ -527,6 +527,8 @@ static void ffmpeg_cleanup(int ret)
         av_freep(&ost->audio_channels_map);
         ost->audio_channels_mapped = 0;
 
+        av_dict_free(&ost->sws_dict);
+
         avcodec_free_context(&ost->enc_ctx);
 
         av_freep(&output_streams[i]);
@@ -554,8 +556,12 @@ static void ffmpeg_cleanup(int ret)
         av_freep(&input_streams[i]);
     }
 
-    if (vstats_file)
-        fclose(vstats_file);
+    if (vstats_file) {
+        if (fclose(vstats_file))
+            av_log(NULL, AV_LOG_ERROR,
+                   "Error closing vstats file, loss of information possible: %s\n",
+                   av_err2str(AVERROR(errno)));
+    }
     av_freep(&vstats_filename);
 
     av_freep(&input_streams);
@@ -4120,16 +4126,12 @@ static int transcode(void)
         }
 
         ret = transcode_step();
-        if (ret < 0) {
-            if (ret == AVERROR_EOF || ret == AVERROR(EAGAIN)) {
-                continue;
-            } else {
-                char errbuf[128];
-                av_strerror(ret, errbuf, sizeof(errbuf));
+        if (ret < 0 && ret != AVERROR_EOF) {
+            char errbuf[128];
+            av_strerror(ret, errbuf, sizeof(errbuf));
 
-                av_log(NULL, AV_LOG_ERROR, "Error while filtering: %s\n", errbuf);
-                break;
-            }
+            av_log(NULL, AV_LOG_ERROR, "Error while filtering: %s\n", errbuf);
+            break;
         }
 
         /* dump report by using the output first video and audio streams */
@@ -4200,7 +4202,10 @@ static int transcode(void)
             ost = output_streams[i];
             if (ost) {
                 if (ost->logfile) {
-                    fclose(ost->logfile);
+                    if (fclose(ost->logfile))
+                        av_log(NULL, AV_LOG_ERROR,
+                               "Error closing logfile, loss of information possible: %s\n",
+                               av_err2str(AVERROR(errno)));
                     ost->logfile = NULL;
                 }
                 av_freep(&ost->forced_kf_pts);
