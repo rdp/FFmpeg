@@ -1,1 +1,1 @@
-ffmpeg_g.exe -local_buffer_size 500M -receiver_component "AVerMedia BDA Digital Capture" -tune_freq 529500 -dvbt_tune_bandwidth_mhz 7 -dtv t -i "dshowbda:video=AVerMedia BDA Digital DVBT Tuner" -t 10 -y 31.mp4
+ffmpeg_g.exe -local_buffer_size 500M -receiver_component "AVerMedia BDA Digital Capture" -dump_raw_bytes_filename 226500.raw.ts -tune_freq 226500			 -dvbt_tune_bandwidth_mhz 7 -dtv t -i "dshowbda:video=AVerMedia BDA Digital DVBT Tuner" -t 60 -c copy 226500.60.ts
