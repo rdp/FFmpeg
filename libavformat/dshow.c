@@ -201,6 +201,7 @@ dshow_frame_callback(void *priv_data, int index, uint8_t *buf, int buf_size, int
     for(ppktl = &ctx->pktl ; *ppktl ; ppktl = &(*ppktl)->next);
     *ppktl = pktl_next;
     ctx->curbufsize[index] += buf_size;
+    av_log(s, AV_LOG_DEBUG, "adding packet to dshow buffer, size is not %lld\n", ctx->curbufsize[index]);
 
     SetEvent(ctx->event[1]);
     ReleaseMutex(ctx->mutex);
