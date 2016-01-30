@@ -151,10 +151,21 @@ static int shall_we_drop(AVFormatContext *s, int index, enum dshowDeviceType dev
     struct dshow_ctx *ctx = s->priv_data;
     static const uint8_t dropscore[] = {62, 75, 87, 100};
     const int ndropscores = FF_ARRAY_ELEMS(dropscore);
-    int buffer_size = FFMAX(s->max_picture_buffer, ctx->local_buffer_size);
+    int buffer_size = FFMAX(s->max_picture_buffer, ctx->local_buffer_size); // max_picture_buffer is rtbufsize
     unsigned int buffer_fullness = (ctx->curbufsize[index]*100)/buffer_size;
     const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
 
+	if (ctx->dtv > 0) {
+		// don't drop any partial packets here...
+		if(buffer_fullness > 100) {
+     	    av_log(s, AV_LOG_ERROR, "You appear to be doing a stream [digital tv] capture "
+		     "however the internal buffer is overfull (max size %d use %%%d) frame dropped! "
+              "This means that an internal 'part of a frame' is being dropped, which can be quite devastating to capture, "
+			  "please change encoding parameters so it can keep up in realtime.", buffer_size, buffer_fullness);
+            return 1;
+		}
+	}
+	
     if(dropscore[++ctx->video_frame_num%ndropscores] <= buffer_fullness) {
         av_log(s, AV_LOG_ERROR,
               "real-time buffer [%s] [%s input] too full or near too full (%d%% of size: %d [rtbufsize/local_buffer_size parameter])! frame dropped!\n",
@@ -201,6 +212,8 @@ dshow_frame_callback(void *priv_data, int index, uint8_t *buf, int buf_size, int
     for(ppktl = &ctx->pktl ; *ppktl ; ppktl = &(*ppktl)->next);
     *ppktl = pktl_next;
     ctx->curbufsize[index] += buf_size;
+    av_log(s, AV_LOG_DEBUG, "adding packet size %d to dshow buffer, buffer size used is now %lld\n", buf_size, ctx->curbufsize[index]);
+
 
     SetEvent(ctx->event[1]);
     ReleaseMutex(ctx->mutex);
@@ -1412,7 +1425,7 @@ const AVOption dshow_options[] = {
     { "sample_size", "set audio sample size", OFFSET(sample_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 16, DEC },
     { "channels", "set number of audio channels, such as 1 or 2", OFFSET(channels), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "audio_buffer_size", "set audio device buffer latency size in milliseconds (default is the device's default)", OFFSET(audio_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
-    { "local_buffer_size", "set buffer for cacheing local samples, bytes", OFFSET(local_buffer_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
+    { "local_buffer_size", "set buffer for cacheing local samples, bytes", OFFSET(local_buffer_size), AV_OPT_TYPE_INT, {.i64 = 10000000}, 0, INT_MAX, DEC },
     { "list_devices", "list available devices",                      OFFSET(list_devices), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, DEC },
     { "list_options", "list available options for specified device", OFFSET(list_options), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, DEC },
     { "video_device_number", "set video device number for devices with same name (starts at 0)", OFFSET(video_device_number), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
