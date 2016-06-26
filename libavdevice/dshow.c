@@ -1209,7 +1209,15 @@ static int dshow_read_header(AVFormatContext *avctx)
     r = IMediaControl_Run(control);
     if (r == S_FALSE) {
         OAFilterState pfs;
-        r = IMediaControl_GetState(control, 0, &pfs);
+        r = IMediaControl_GetState(control, 1000, &pfs); /* theoretically waits for all to start running */
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "unable to IMediaControl GetState");
+            goto error;
+        }
+        if (pfs != State_Running) {
+            av_log(avctx, AV_LOG_ERROR, "IMediaControl GetState did not returning running %d returned %ld\n", State_Running, pfs);
+            goto error;
+        }
     }
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not run graph (sometimes caused by a device already in use by other application)\n");

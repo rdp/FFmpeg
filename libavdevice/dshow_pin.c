@@ -301,56 +301,71 @@ long WINAPI
 libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
 {
     libAVPin *pin = (libAVPin *) ((uint8_t *) this - imemoffset);
-    enum dshowDeviceType devtype = pin->filter->type;
-    void *priv_data;
-    AVFormatContext *s;
-    uint8_t *buf;
+    libAVFilter *filter = pin->filter;
+    enum dshowDeviceType devtype = filter->type;
+    void *priv_data = filter->priv_data;
+    AVFormatContext *s = priv_data;
+    struct dshow_ctx *ctx = s->priv_data;
+    int index = filter->stream_index;
+    uint8_t *buf = 0;
     int buf_size; /* todo should be a long? */
-    int index;
-    int64_t curtime;
-    int64_t orig_curtime;
-    int64_t graphtime;
+    int64_t curtime = 0;
+    int64_t orig_curtime = 0;
+    int64_t graphtime = 0;
     const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
-    IReferenceClock *clock = pin->filter->clock;
+    IReferenceClock *clock = filter->clock;
     int64_t dummy;
-    struct dshow_ctx *ctx;
-
+    int r;
+    FILTER_STATE state;
 
     dshowdebug("libAVMemInputPin_Receive(%p)\n", this);
 
     if (!sample)
         return E_POINTER;
 
+    r = libAVFilter_GetState(filter, 0, &state);
+
+    if (r == S_OK && state != State_Running) {
+        /* happens at stop time, may as well just reject them since timestamps may be wrong */
+        av_log(ctx, AV_LOG_DEBUG, "rejecting packet %s because current state %d != State_Running %d %s\n", 
+            ctx->device_name[devtype], state, State_Running, devtypename);
+        return S_OK;
+    }
+
     IMediaSample_GetTime(sample, &orig_curtime, &dummy);
-    orig_curtime += pin->filter->start_time;
-    IReferenceClock_GetTime(clock, &graphtime);
+    orig_curtime += filter->start_time;
+    r = IReferenceClock_GetTime(clock, &graphtime);
+    if (r != S_OK && r != S_FALSE) {
+        av_log(ctx, AV_LOG_INFO, "unable to get graphtime\n");
+    }
     if (devtype == VideoDevice) {
-        /* PTS from video devices is unreliable. */
-        IReferenceClock_GetTime(clock, &curtime);
+        /* PTS from video devices is sometimes unreliable, just use current wall/graphtime */
+        /* if this fails, allow packet through in case something later like -vsync can save it */
+        r = IReferenceClock_GetTime(clock, &curtime);
+        if (r != S_OK && r != S_FALSE) { /* S_FALSE means "same as the last time" */
+            av_log(ctx, AV_LOG_INFO, "warning, unable to get timestamp from graph for video packet!"
+            " clock=%d possibly use vsync %d\n", (int) clock, r);
+        }
     } else {
-        IMediaSample_GetTime(sample, &curtime, &dummy);
-        if(curtime > 400000000000000000LL) {
-            /* initial frames sometimes start < 0 (shown as a very large number here,
-               like 437650244077016960 which FFmpeg doesn't like.
-               TODO figure out math. For now just drop them. */
-            av_log(NULL, AV_LOG_DEBUG,
-                "dshow dropping initial (or ending) audio frame with odd PTS too high %"PRId64"\n", curtime);
+        r = IMediaSample_GetTime(sample, &curtime, &dummy);
+        if (r != S_OK) {
+            /* First packet gets here, and with bad timestamp...so swallow it.
+               NB we cannot do this for data streams [marked as vide]
+               which sometimes "legitimately" have no timestamp if they're
+               intermediate packets or what not, apparently */
+            av_log(ctx, AV_LOG_DEBUG, "rejecting audio packet GetTime failed r=%d\n", r);
             return S_OK;
         }
-        curtime += pin->filter->start_time;
+        curtime += filter->start_time;
     }
 
     buf_size = IMediaSample_GetActualDataLength(sample);
     IMediaSample_GetPointer(sample, &buf);
-    priv_data = pin->filter->priv_data;
-    s = priv_data;
-    ctx = s->priv_data;
-    index = pin->filter->stream_index;
 
-    av_log(NULL, AV_LOG_VERBOSE, "dshow passing through packet of type %s size %8d "
-        "timestamp %"PRId64" orig timestamp %"PRId64" graph timestamp %"PRId64" diff %"PRId64" %s\n",
+    av_log(ctx, AV_LOG_VERBOSE, "passing through packet of type %s size %8d "
+        "timestamp %"PRId64" orig timestamp %"PRId64" graph timestamp %"PRId64" diff %"PRId64" type %s\n",
         devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, ctx->device_name[devtype]);
-    pin->filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
+    filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
 
     return S_OK;
 }
