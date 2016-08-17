@@ -22,7 +22,7 @@
 #ifndef AVDEVICE_DSHOW_CAPTURE_H
 #define AVDEVICE_DSHOW_CAPTURE_H
 
-#define DSHOWDEBUG 0
+#define DSHOWDEBUG 1
 
 #include "avdevice.h"
 
@@ -47,7 +47,7 @@ void ff_print_AM_MEDIA_TYPE(const AM_MEDIA_TYPE *type);
 void ff_printGUID(const GUID *g);
 
 extern const AVClass *ff_dshow_context_class_ptr;
-#define dshowdebug(...) ff_dlog(&ff_dshow_context_class_ptr, __VA_ARGS__)
+#define dshowdebug(...) av_log(&ff_dshow_context_class_ptr, AV_LOG_DEBUG, __VA_ARGS__)
 
 static inline void nothing(void *foo)
 {

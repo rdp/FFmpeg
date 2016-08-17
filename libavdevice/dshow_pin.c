@@ -297,6 +297,7 @@ libAVMemInputPin_GetAllocatorRequirements(libAVMemInputPin *this,
     dshowdebug("libAVMemInputPin_GetAllocatorRequirements(%p)\n", this);
     return E_NOTIMPL;
 }
+
 long WINAPI
 libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
 {
@@ -314,6 +315,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     IReferenceClock *clock = pin->filter->clock;
     int64_t dummy;
     struct dshow_ctx *ctx;
+    int hr;
 
 
     dshowdebug("libAVMemInputPin_Receive(%p)\n", this);
@@ -341,7 +343,11 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     }
 
     buf_size = IMediaSample_GetActualDataLength(sample);
-    IMediaSample_GetPointer(sample, &buf);
+    hr = IMediaSample_GetPointer(sample, &buf);
+    if (hr != S_OK) {
+        av_log(NULL, AV_LOG_ERROR, "cannot getPointer");
+        return hr;
+    }
     priv_data = pin->filter->priv_data;
     s = priv_data;
     ctx = s->priv_data;
@@ -350,8 +356,8 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     av_log(NULL, AV_LOG_VERBOSE, "dshow passing through packet of type %s size %8d "
         "timestamp %"PRId64" orig timestamp %"PRId64" graph timestamp %"PRId64" diff %"PRId64" %s\n",
         devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, ctx->device_name[devtype]);
-    pin->filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
-
+        pin->filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
+ 
     return S_OK;
 }
 long WINAPI

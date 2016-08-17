@@ -30,6 +30,11 @@
 #include "objidl.h"
 #include "shlwapi.h"
 
+static int 
+dshow_cycle_dtv_devices(AVFormatContext *avctx, const GUID *device_guid, const char *sourcetypename, const char *device_name, ICreateDevEnum *devenum, IBaseFilter **pfilter);
+static int
+dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *src_pin_name, IPin *pin_out, IBaseFilter *destination, const char *dest_pin_name, 
+IPin **lookup_pin, const char *lookup_pin_name );
 
 static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
 {
@@ -196,6 +201,8 @@ fail:
     ReleaseMutex(ctx->mutex);
     return;
 }
+
+
 
 /**
  * Cycle through available devices using the device enumerator devenum,
@@ -721,6 +728,100 @@ dshow_list_device_options(AVFormatContext *avctx, ICreateDevEnum *devenum,
     return 0;
 }
 
+        
+/* dshow_find_pin given a filter, direction and optional pin name, return a ref to that pin
+ * note this does add a reference to the pin returned...
+*/
+static int
+dshow_lookup_pin(AVFormatContext *avctx, IBaseFilter *filter, PIN_DIRECTION pin_direction, IPin **discovered_pin, const char *lookup_pin_name, const char *filter_descriptive_text) {
+    IEnumPins *pins = 0;
+    IPin *pin = NULL;
+    IPin *local_discovered_pin = NULL; // for easier release checking
+    int r;
+
+    r = IBaseFilter_EnumPins(filter, &pins);
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not enumerate filter %s pins.\n", filter_descriptive_text);
+        return AVERROR(EIO);
+    }
+    while (!local_discovered_pin && IEnumPins_Next(pins, 1, &pin, NULL) == S_OK) {
+        char *name_buf;
+        PIN_INFO info = {0};
+
+        IPin_QueryPinInfo(pin, &info);
+        IBaseFilter_Release(info.pFilter);
+        name_buf = dup_wchar_to_utf8(info.achName);
+        av_log(avctx, AV_LOG_DEBUG, "Filter %s pin [%s] has direction %d wanted direction %d\n", filter_descriptive_text, name_buf, info.dir, pin_direction);
+
+        if (info.dir == pin_direction) 
+            if ( (lookup_pin_name == NULL) ||                                             //if input name empty
+                    ((lookup_pin_name) && !(strcmp(name_buf,lookup_pin_name))) )     //or input name not empty and equal to the current pin
+                  local_discovered_pin = pin;
+        if (!local_discovered_pin)
+          IPin_Release(pin);
+    }
+    IEnumPins_Release(pins);
+
+    if (!local_discovered_pin) {
+        if (lookup_pin_name)
+            av_log(avctx, AV_LOG_ERROR, "Filter %s doesn't have pin with direction %d named \"%s\"\n", filter_descriptive_text, pin_direction, lookup_pin_name);
+        else
+            av_log(avctx, AV_LOG_ERROR, "Filter %s doesn't have pin with direction %d\n", filter_descriptive_text, pin_direction);
+        return AVERROR(EIO);
+    }
+    *discovered_pin = local_discovered_pin;
+    return 0; // success
+}
+
+/* dshow_connect_bda_pins connects [source] filter's output pin named [src_pin_name] to [destination] filter's input pin named [dest_pin_name]
+ * and provides the [destination] filter's output pin named [lookup_pin_name] (or pin_out) to a pin ptr [lookup_pin]
+ * pin names and lookup_pin can be NULL if not needed/doesn't care
+*/
+static int
+dshow_connect_bda_pins(AVFormatContext *avctx, IBaseFilter *source, const char *src_pin_name, IPin *pin_out, IBaseFilter *destination, const char *dest_pin_name, 
+IPin **lookup_pin, const char *lookup_pin_name )
+{
+    struct dshow_ctx *ctx = avctx->priv_data;
+    IGraphBuilder *graph = NULL;
+    IPin *pin_in = NULL;
+    int r;
+
+    graph = ctx->graph;
+
+    if (!graph || (!source && !pin_out) || !destination)
+    {
+        av_log(avctx, AV_LOG_ERROR, "Missing graph component.\n");
+        return AVERROR(EIO);
+    }
+    if (pin_out == NULL) {
+        r = dshow_lookup_pin(avctx, source, PINDIR_OUTPUT, &pin_out, src_pin_name, "source filter");
+        if (r != S_OK) {
+            return r;
+        }
+    }
+    r = dshow_lookup_pin(avctx, destination, PINDIR_INPUT, &pin_in, dest_pin_name, "dest filter");
+    if (r != S_OK) {
+        return r;
+    }
+
+    ///connect pins
+
+    r = IGraphBuilder_Connect(graph, pin_out, pin_in);
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not connect pins.\n");
+        return AVERROR(EIO);
+    }
+
+    if (lookup_pin != NULL) {
+        r = dshow_lookup_pin(avctx, destination, PINDIR_OUTPUT, lookup_pin, lookup_pin_name, "outgoing pin on destination");
+        if (r != S_OK) {
+            return r;
+        }
+    }
+
+    return 0;
+}
+
 static int
 dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
                   enum dshowDeviceType devtype, enum dshowSourceFilterType sourcetype)
@@ -798,12 +899,35 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         av_log(avctx, AV_LOG_ERROR, "Could not add device filter to graph.\n");
         goto error;
     }
+        
 
     if ((r = dshow_cycle_pins(avctx, devtype, sourcetype, device_filter, &device_pin)) < 0) {
         ret = r;
         goto error;
     }
 
+    if (sourcetype == VideoSourceDevice) {
+        IBaseFilter *smart_tee = NULL;
+
+        if ((r = dshow_cycle_dtv_devices(avctx, &CLSID_LegacyAmFilterCategory, "BDA Network Tuner", "Smart Tee", devenum, &smart_tee)) < 0) {
+            goto error;
+        }
+        av_log(avctx, AV_LOG_DEBUG, "got smart tee\n");
+        r = IGraphBuilder_AddFilter(graph, smart_tee, NULL);
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not add smart tee to graph.\n");
+            goto error;
+        }
+        /* connect device_pin to smart_tee's "Input"
+           and assign smart_tee's "Preview" to device_pin */
+        r = dshow_connect_bda_pins(avctx, NULL, NULL, device_pin, smart_tee, NULL, &device_pin, "Capture");
+        if (r != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not connect smart_tee or somefin\n");
+            goto error;
+        }
+    }
+
+    
     ctx->device_pin[devtype] = device_pin;
 
     capture_filter = libAVFilter_Create(avctx, callback, devtype);
@@ -862,8 +986,9 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         goto error;
     }
 
+    
     libAVPin_AddRef(capture_filter->pin);
-    capture_pin = capture_filter->pin;
+    capture_pin = capture_filter->pin; // our local pin
     ctx->capture_pin[devtype] = capture_pin;
 
     r = CoCreateInstance(&CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
@@ -1215,7 +1340,6 @@ static int dshow_read_header(AVFormatContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "Could not run graph (sometimes caused by a device already in use by other application)\n");
         goto error;
     }
-
     ret = 0;
 
 error:
@@ -1278,6 +1402,114 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     return ctx->eof ? AVERROR(EIO) : pkt->size;
 }
+
+
+/**
+ * Cycle through available devices using the device enumerator devenum,
+ * retrieve the device with type specified by devtype and return the
+ * pointer to the object found in *pfilter.
+ * If pfilter is NULL, list all device names.
+ */
+static int
+dshow_cycle_dtv_devices(AVFormatContext *avctx, const GUID *device_guid, const char *sourcetypename, const char *device_name, ICreateDevEnum *devenum, IBaseFilter **pfilter)
+{
+    struct dshow_ctx *ctx = avctx->priv_data;
+    IBaseFilter *device_filter = NULL;
+    IEnumMoniker *classenum = NULL;
+    IMoniker *m = NULL;
+    int skip = ctx->video_device_number;
+    int r;
+
+    const char *devtypename = "dtv";
+
+    r = ICreateDevEnum_CreateClassEnumerator(devenum, device_guid,
+                                             (IEnumMoniker **) &classenum, 0);
+    if (r != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not enumerate %s devices (or none found).\n",
+               devtypename);
+        return AVERROR(EIO);
+    }
+
+    while (!device_filter && IEnumMoniker_Next(classenum, 1, &m, NULL) == S_OK) {
+        IPropertyBag *bag = NULL;
+        char *friendly_name = NULL;
+        char *unique_name = NULL;
+        VARIANT var;
+        IBindCtx *bind_ctx = NULL;
+        LPOLESTR olestr = NULL;
+        LPMALLOC co_malloc = NULL;
+        int i;
+
+        r = CoGetMalloc(1, &co_malloc);
+        if (r = S_OK)
+            goto fail1;
+        r = CreateBindCtx(0, &bind_ctx);
+        if (r != S_OK)
+            goto fail1;
+        /* GetDisplayname works for both video and audio, DevicePath doesn't */
+        r = IMoniker_GetDisplayName(m, bind_ctx, NULL, &olestr);
+        if (r != S_OK)
+            goto fail1;
+        unique_name = dup_wchar_to_utf8(olestr);
+        /* replace ':' with '_' since we use : to delineate between sources */
+        for (i = 0; i < strlen(unique_name); i++) {
+            if (unique_name[i] == ':')
+                unique_name[i] = '_';
+        }
+
+        r = IMoniker_BindToStorage(m, 0, 0, &IID_IPropertyBag, (void *) &bag);
+        if (r != S_OK)
+            goto fail1;
+
+        var.vt = VT_BSTR;
+        r = IPropertyBag_Read(bag, L"FriendlyName", &var, NULL);
+        if (r != S_OK)
+            goto fail1;
+        friendly_name = dup_wchar_to_utf8(var.bstrVal);
+
+        if (pfilter) {
+            av_log(avctx, AV_LOG_DEBUG, "comparing requested %s to device name %s\n", device_name, friendly_name);
+            if (strcmp(device_name, friendly_name) && strcmp(device_name, unique_name))
+                goto fail1;
+
+            if (!skip--) {
+                r = IMoniker_BindToObject(m, 0, 0, &IID_IBaseFilter, (void *) &device_filter);
+                if (r != S_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Unable to BindToObject for %s\n", device_name);
+                    goto fail1;
+                }
+            }
+        } else {
+            av_log(avctx, AV_LOG_INFO, " \"%s\"\n", friendly_name);
+            av_log(avctx, AV_LOG_INFO, "    Alternative name \"%s\"\n", unique_name);
+        }
+
+fail1:
+        if (olestr && co_malloc)
+            IMalloc_Free(co_malloc, olestr);
+        if (bind_ctx)
+            IBindCtx_Release(bind_ctx);
+        av_free(friendly_name);
+        av_free(unique_name);
+        if (bag)
+            IPropertyBag_Release(bag);
+        IMoniker_Release(m);
+    }
+
+    IEnumMoniker_Release(classenum);
+
+    if (pfilter) {
+        if (!device_filter) {
+            av_log(avctx, AV_LOG_ERROR, "Could not find %s device with name [%s] among source devices of type %s.\n",
+                   devtypename, device_name, sourcetypename);
+            return AVERROR(EIO);
+        }
+        *pfilter = device_filter;
+    }
+
+    return 0;
+}
+
 
 #define OFFSET(x) offsetof(struct dshow_ctx, x)
 #define DEC AV_OPT_FLAG_DECODING_PARAM

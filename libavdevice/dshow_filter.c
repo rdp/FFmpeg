@@ -146,15 +146,16 @@ libAVFilter_JoinFilterGraph(libAVFilter *this, IFilterGraph *graph,
 
     this->info.pGraph = graph;
     if (name)
-        wcscpy(this->info.achName, name);
+        wcscpy(this->info.achName, name); // name is "your name"
 
     return S_OK;
 }
 long WINAPI
 libAVFilter_QueryVendorInfo(libAVFilter *this, wchar_t **info)
 {
-    dshowdebug("libAVFilter_QueryVendorInfo(%p)\n", this);
+    dshowdebug("libAVFilter_QueryVendorInfo(%p) not impl\n", this);
 
+    return E_NOTIMPL;
     if (!info)
         return E_POINTER;
     return E_NOTIMPL; /* don't have to do anything here */
