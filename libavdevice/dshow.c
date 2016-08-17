@@ -910,20 +910,23 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         IBaseFilter *smart_tee = NULL;
 
         if ((r = dshow_cycle_dtv_devices(avctx, &CLSID_LegacyAmFilterCategory, "BDA Network Tuner", "Smart Tee", devenum, &smart_tee)) < 0) {
-            goto error;
+            av_log(avctx, AV_LOG_ERROR, "unable to get smart tee\n");
+            // leave device_pin there
         }
-        av_log(avctx, AV_LOG_DEBUG, "got smart tee\n");
-        r = IGraphBuilder_AddFilter(graph, smart_tee, NULL);
-        if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not add smart tee to graph.\n");
-            goto error;
-        }
-        /* connect device_pin to smart_tee's "Input"
-           and assign smart_tee's "Preview" to device_pin */
-        r = dshow_connect_bda_pins(avctx, NULL, NULL, device_pin, smart_tee, NULL, &device_pin, "Capture");
-        if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not connect smart_tee or somefin\n");
-            goto error;
+        else {
+            av_log(avctx, AV_LOG_DEBUG, "got smart tee\n");
+            r = IGraphBuilder_AddFilter(graph, smart_tee, NULL);
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not add smart tee to graph.\n");
+                goto error;
+            }
+            /* connect device_pin to smart_tee's "Input"
+               and assign smart_tee's "Preview" to device_pin */
+            r = dshow_connect_bda_pins(avctx, NULL, NULL, device_pin, smart_tee, NULL, &device_pin, "Capture");
+            if (r != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not connect to smart tee?\n");
+                goto error;
+            }
         }
     }
 
