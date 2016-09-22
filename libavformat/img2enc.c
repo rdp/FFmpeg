@@ -84,10 +84,12 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     VideoMuxData *img = s->priv_data;
     AVIOContext *pb[4];
     char filename[1024];
-    AVCodecContext *codec = s->streams[pkt->stream_index]->codec;
+    AVStream *stream = s->streams[ pkt->stream_index ];
+    AVCodecContext *codec = stream->codec;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(codec->pix_fmt);
     int i;
     int nb_renames = 0;
+    int64_t ts = av_rescale_q(pkt->pts, stream->time_base, AV_TIME_BASE_Q);
 
     if (!img->is_pipe) {
         if (img->update) {
@@ -101,7 +103,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
                 av_log(s, AV_LOG_ERROR, "Could not get frame filename with strftime\n");
                 return AVERROR(EINVAL);
             }
-        } else if (av_get_frame_filename(filename, sizeof(filename), img->path, img->img_number) < 0 &&
+        } else if (av_get_frame_filename2(filename, sizeof(filename), img->path, img->img_number, ts) < 0 &&
                    img->img_number > 1) {
             av_log(s, AV_LOG_ERROR,
                    "Could not get frame filename number %d from pattern '%s' (either set updatefirst or use a pattern like %%03d within the filename pattern)\n",

@@ -2670,6 +2670,11 @@ void av_dump_format(AVFormatContext *ic,
 int av_get_frame_filename(char *buf, int buf_size,
                           const char *path, int number);
 
+
+int av_get_frame_filename2(char *buf, int buf_size,
+                          const char *path, int number, int64_t ts);                          
+                          
+                          
 /**
  * Check whether filename actually is a numbered sequence generator.
  *
