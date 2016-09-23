@@ -4012,8 +4012,8 @@ int av_get_frame_filename2(char *buf, int buf_size, const char *path, int number
                     goto fail;
                 }
                 if (ts < 1) {
-                    av_log(NULL, AV_LOG_ERROR, "%%t no ts");
-                    goto fail;
+                    av_log(NULL, AV_LOG_ERROR, "%%t no ts %lld", ts);
+                    //goto fail;
                 }
                 percent_t_found = 1;
                 ms = ts % (AV_TIME_BASE / 1000);
