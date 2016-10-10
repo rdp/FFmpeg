@@ -619,8 +619,10 @@ If the pattern contains "%d" or "%0@var{N}d", the first filename of
 the file list specified will contain the number 1, all the following
 numbers will be sequential.
 
-The pattern may also contain "%t", this string specifies the timestamp
-of the frame be output in hours, minutes and seconds, and milliseconds. 
+If the pattern contains "%t", the frame's timestamps will be inserted
+in the filename like "00.00.00.000" for hours, minutes, seconds, 
+and milliseconds. 
+
 The "%t" and "%d" patterns may be used simultaneously.
 
 The pattern may contain a suffix which is used to automatically
@@ -639,7 +641,7 @@ The following example shows how to use @command{ffmpeg} for creating a
 sequence of files @file{img-001.jpeg}, @file{img-002.jpeg}, ...,
 taking one image every second from the input video:
 @example
-ffmpeg -i in.avi -vsync 1 -r 1 -f image2 'img-%03d.jpeg'
+ffmpeg -i in.avi -vsync cfr -r 1 -f image2 'img-%03d.jpeg'
 @end example
 
 Note that with @command{ffmpeg}, if the format is not specified with the
@@ -647,12 +649,12 @@ Note that with @command{ffmpeg}, if the format is not specified with the
 format, the image2 muxer is automatically selected, so the previous
 command can be written as:
 @example
-ffmpeg -i in.avi -vsync 1 -r 1 'img-%03d.jpeg'
+ffmpeg -i in.avi -vsync cfr -r 1 'img-%03d.jpeg'
 @end example
 
 Note also that the pattern must not necessarily contain "%d" or
 "%0@var{N}d", for example to create a single image file
-@file{img.jpeg} from the input video you can employ the command:
+@file{img.jpeg} from the start of the input video you can employ the command:
 @example
 ffmpeg -i in.avi -f image2 -frames:v 1 img.jpeg
 @end example
@@ -666,6 +668,13 @@ For example to generate image files from the @code{strftime()}
 can be used:
 @example
 ffmpeg -f v4l2 -r 1 -i /dev/video0 -f image2 -strftime 1 "%Y-%m-%d_%H-%M-%S.jpg"
+@end example
+
+The following example uses the timestamp parameter to generate one
+image file per video frame from the input, and name it including its original
+timestamp.
+@example
+ffmpeg -i in.avi -vsync vfr -copyts img-%t.jpg
 @end example
 
 @subsection Options
