@@ -229,13 +229,8 @@ fail:
  */
 static int
 dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
-<<<<<<< HEAD:libavformat/dshow.c
                     enum dshowDeviceType devtype, enum dshowSourceFilterType sourcetype, 
-                    IBaseFilter **pfilter, char **device_uniqe_name)
-=======
-                    enum dshowDeviceType devtype, enum dshowSourceFilterType sourcetype,
                     IBaseFilter **pfilter, char **device_unique_name)
->>>>>>> origin/master:libavdevice/dshow.c
 {
     struct dshow_ctx *ctx = avctx->priv_data;
     IBaseFilter *device_filter = NULL;
@@ -306,11 +301,7 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
                     av_log(avctx, AV_LOG_ERROR, "Unable to BindToObject for %s\n", device_name);
                     goto fail1;
                 }
-<<<<<<< HEAD:libavformat/dshow.c
-                *device_uniqe_name = unique_name;
-=======
                 *device_unique_name = unique_name;
->>>>>>> origin/master:libavdevice/dshow.c
                 // success, loop will end now
             }
         } else {
@@ -811,18 +802,11 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
             goto error;
         }
     }
-<<<<<<< HEAD:libavformat/dshow.c
-    if (ctx->device_filter[otherDevType]) {
-        // don't add two copies of the same device to the graph (could do this earlier to avoid double crossbars, etc.)
-        if (strcmp(device_filter_unique_name, ctx->device_unique_name[otherDevType]) == 0) {
-          av_log(avctx, AV_LOG_DEBUG, "reusing previous graph capture filter...\n");
-=======
         if (ctx->device_filter[otherDevType]) {
         // avoid adding add two instances of the same device to the graph, one for video, one for audio
         // a few devices don't support this (could also do this check earlier to avoid double crossbars, etc. but they seem OK)
         if (strcmp(device_filter_unique_name, ctx->device_unique_name[otherDevType]) == 0) {
           av_log(avctx, AV_LOG_DEBUG, "reusing previous graph capture filter... %s\n", device_filter_unique_name);
->>>>>>> origin/master:libavdevice/dshow.c
           IBaseFilter_Release(device_filter);
           device_filter = ctx->device_filter[otherDevType];
           IBaseFilter_AddRef(ctx->device_filter[otherDevType]);
@@ -831,14 +815,6 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         }
     }
 
-<<<<<<< HEAD:libavformat/dshow.c
-    if (device_filter != ctx->device_filter[otherDevType]) {
-        r = IGraphBuilder_AddFilter(graph, device_filter, input_filter_name[devtype]);
-        if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not add device filter to graph.\n");
-            goto error;
-        }
-=======
     ctx->device_filter [devtype] = device_filter;
     ctx->device_unique_name [devtype] = device_filter_unique_name;
 
@@ -846,7 +822,6 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     if (r != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not add device filter to graph.\n");
         goto error;
->>>>>>> origin/master:libavdevice/dshow.c
     }
     
     ctx->device_filter [devtype] = device_filter;
@@ -1124,27 +1099,17 @@ dshow_add_device(AVFormatContext *avctx,
             av_log(avctx, AV_LOG_DEBUG, "attempt to use full range for HDYC...\n");
             par->color_range = AVCOL_RANGE_MPEG; // just in case it needs this...
         }
-<<<<<<< HEAD:libavformat/dshow.c
-        if (codec->pix_fmt == AV_PIX_FMT_NONE) {
-             const AVCodecTag *const tags[] = { avformat_get_riff_video_tags(), NULL };
-             if (is_mpeg) {
-               codec->codec_id = AV_CODEC_ID_MPEG2VIDEO;
-             } else {
-               codec->codec_id = av_codec_get_id(tags, bih->biCompression);
-               if (codec->codec_id == AV_CODEC_ID_NONE) {
-                   av_log(avctx, AV_LOG_ERROR, "Unknown compression type. "
-                                  "Please report type 0x%X.\n", (int) bih->biCompression);
-                   return AVERROR_PATCHWELCOME;
-              }
-=======
         if (par->format == AV_PIX_FMT_NONE) {
             const AVCodecTag *const tags[] = { avformat_get_riff_video_tags(), NULL };
-            par->codec_id = av_codec_get_id(tags, bih->biCompression);
-            if (par->codec_id == AV_CODEC_ID_NONE) {
-                av_log(avctx, AV_LOG_ERROR, "Unknown compression type. "
+            if (is_mpeg) {
+                par->codec_id = AV_CODEC_ID_MPEG2VIDEO; // needed?
+            } else {
+                par->codec_id = av_codec_get_id(tags, bih->biCompression);
+                if (par->codec_id == AV_CODEC_ID_NONE) {
+                    av_log(avctx, AV_LOG_ERROR, "Unknown compression type. "
                                  "Please report type 0x%X.\n", (int) bih->biCompression);
-                return AVERROR_PATCHWELCOME;
->>>>>>> origin/master:libavdevice/dshow.c
+                    return AVERROR_PATCHWELCOME;
+                }
             }
             par->bits_per_coded_sample = bih->biBitCount;
         } else {
@@ -1275,7 +1240,6 @@ int dshow_read_header(AVFormatContext *avctx)
             }
         }
 
-<<<<<<< HEAD:libavformat/dshow.c
         r = CoCreateInstance(&CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER,
                              &IID_ICreateDevEnum, (void **) &devenum);
         if (r != S_OK) {
@@ -1310,19 +1274,6 @@ int dshow_read_header(AVFormatContext *avctx)
         if (ctx->device_name[VideoDevice]) {
             if ((r = dshow_open_device(avctx, devenum, VideoDevice, VideoSourceDevice)) < 0 ||
                 (r = dshow_add_device(avctx, VideoDevice)) < 0) {
-=======
-    if (ctx->list_devices) {
-        av_log(avctx, AV_LOG_INFO, "DirectShow video devices (some may be both video and audio devices)\n");
-        dshow_cycle_devices(avctx, devenum, VideoDevice, VideoSourceDevice, NULL, NULL);
-        av_log(avctx, AV_LOG_INFO, "DirectShow audio devices\n");
-        dshow_cycle_devices(avctx, devenum, AudioDevice, AudioSourceDevice, NULL, NULL);
-        ret = AVERROR_EXIT;
-        goto error;
-    }
-    if (ctx->list_options) {
-        if (ctx->device_name[VideoDevice])
-            if ((r = dshow_list_device_options(avctx, devenum, VideoDevice, VideoSourceDevice))) {
->>>>>>> origin/master:libavdevice/dshow.c
                 ret = r;
                 goto error;
             }
