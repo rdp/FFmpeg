@@ -356,6 +356,24 @@ void ff_reduce_index(AVFormatContext *s, int stream_index);
 enum AVCodecID ff_guess_image2_codec(const char *filename);
 
 /**
+ * Return in 'buf' the path with '%d' replaced by a number.
+ *
+ * Also handles the '%0nd' format where 'n' is the total number
+ * of digits and '%%'.
+ * Also handles the '%t' format where 't' is the timestamp.
+ *
+ * @param buf destination buffer
+ * @param buf_size destination buffer size
+ * @param path numbered sequence string
+ * @param number frame number
+ * @param flags AV_FRAME_FILENAME_FLAGS_*
+ * @param ts frame timestamp in AV_TIME_BASE fractional seconds.
+ * @return 0 if OK, -1 on format error
+ */
+int ff_get_frame_filename3(char *buf, int buf_size,
+                          const char *path, int number, int flags, int64_t ts);
+
+/**
  * Perform a binary search using av_index_search_timestamp() and
  * AVInputFormat.read_timestamp().
  *

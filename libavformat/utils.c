@@ -4391,15 +4391,18 @@ uint64_t ff_ntp_time(void)
     return (av_gettime() / 1000) * 1000 + NTP_OFFSET_US;
 }
 
-int av_get_frame_filename2(char *buf, int buf_size, const char *path, int number, int flags)
+int ff_get_frame_filename3(char *buf, int buf_size, const char *path, int number, int flags, int64_t ts)
 {
     const char *p;
     char *q, buf1[20], c;
-    int nd, len, percentd_found;
+    int nd, len, percentd_found, percentt_found;
+    int hours, mins, secs, ms;
+    int64_t abs_ts;
 
     q = buf;
     p = path;
     percentd_found = 0;
+    percentt_found = 0;
     for (;;) {
         c = *p++;
         if (c == '\0')
@@ -4428,6 +4431,37 @@ int av_get_frame_filename2(char *buf, int buf_size, const char *path, int number
                 memcpy(q, buf1, len);
                 q += len;
                 break;
+            case 't':
+                if (!(flags & AV_FRAME_FILENAME_FLAGS_MULTIPLE) && percentt_found) {
+                    av_log(NULL, AV_LOG_ERROR, "double %%t not allowed");
+                    goto fail;
+                }
+                if (ts == 0) {
+                    av_log(NULL, AV_LOG_DEBUG, "%%t but no ts, using 0"); // necessary for first frame on some streams
+                }
+                percentt_found = 1;
+                abs_ts = llabs(ts);
+                ms = abs_ts % AV_TIME_BASE;
+                abs_ts /= AV_TIME_BASE;
+                secs = abs_ts % 60;
+                abs_ts /= 60;
+                mins = abs_ts % 60;
+                abs_ts /= 60;
+                hours = abs_ts;
+                if (ts < 0)
+                      snprintf(buf1, sizeof(buf1),
+                             "-%02d.%02d.%02d.%03d", hours, mins, secs, ms);
+                else
+                    snprintf(buf1, sizeof(buf1),
+                             "%02d.%02d.%02d.%03d", hours, mins, secs, ms);
+                len = strlen(buf1);
+                if ((q - buf + len) > buf_size - 1) {
+                   av_log(NULL, AV_LOG_ERROR, "%%t size overflow");
+                   goto fail;
+                }
+                memcpy(q, buf1, len);
+                q += len;
+                break;
             default:
                 goto fail;
             }
@@ -4437,7 +4471,7 @@ addchar:
                 *q++ = c;
         }
     }
-    if (!percentd_found)
+    if (!percentd_found && !percentt_found)
         goto fail;
     *q = '\0';
     return 0;
@@ -4448,7 +4482,12 @@ fail:
 
 int av_get_frame_filename(char *buf, int buf_size, const char *path, int number)
 {
-    return av_get_frame_filename2(buf, buf_size, path, number, 0);
+    return ff_get_frame_filename3(buf, buf_size, path, number, 0, 0);
+}
+
+int av_get_frame_filename2(char *buf, int buf_size, const char *path, int number, int flags)
+{
+    return ff_get_frame_filename3(buf, buf_size, path, number, flags, 0);
 }
 
 void av_url_split(char *proto, int proto_size,
