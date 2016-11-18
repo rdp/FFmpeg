@@ -20,21 +20,24 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef CHECKASM_H
-#define CHECKASM_H
+#ifndef TESTS_CHECKASM_CHECKASM_H
+#define TESTS_CHECKASM_CHECKASM_H
 
 #include <stdint.h>
 #include "config.h"
 #include "libavutil/avstring.h"
 #include "libavutil/cpu.h"
+#include "libavutil/internal.h"
 #include "libavutil/lfg.h"
 #include "libavutil/timer.h"
 
 void checkasm_check_alacdsp(void);
+void checkasm_check_blend(void);
 void checkasm_check_bswapdsp(void);
-void checkasm_check_dcadsp(void);
+void checkasm_check_colorspace(void);
 void checkasm_check_flacdsp(void);
 void checkasm_check_fmtconvert(void);
+void checkasm_check_h264dsp(void);
 void checkasm_check_h264pred(void);
 void checkasm_check_h264qpel(void);
 void checkasm_check_jpeg2000dsp(void);
@@ -165,6 +168,7 @@ void checkasm_checked_call(void *func, ...);
                     tcount++;\
                 }\
             }\
+            emms_c();\
             checkasm_update_bench(tcount, tsum);\
         }\
     } while (0)
@@ -172,4 +176,4 @@ void checkasm_checked_call(void *func, ...);
 #define bench_new(...) while(0)
 #endif
 
-#endif
+#endif /* TESTS_CHECKASM_CHECKASM_H */

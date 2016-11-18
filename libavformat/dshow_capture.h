@@ -19,8 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVDEVICE_DSHOW_H
-#define AVDEVICE_DSHOW_H
+#ifndef AVDEVICE_DSHOW_CAPTURE_H
+#define AVDEVICE_DSHOW_CAPTURE_H
 
 #include "avformat.h"
 #include "libavutil/opt.h"
@@ -301,6 +301,7 @@ struct dshow_ctx {
 
     char *device_name[2];
     char *device_unique_name[2];
+
     int video_device_number;
     int audio_device_number;
 
@@ -394,4 +395,4 @@ int dshow_read_header(AVFormatContext *avctx);
 int dshow_read_packet(AVFormatContext *avctx, AVPacket *pkt);
 int dshow_read_close(AVFormatContext *avctx);
 
-#endif /* AVDEVICE_DSHOW_H */
+#endif /* AVDEVICE_DSHOW_CAPTURE_H */

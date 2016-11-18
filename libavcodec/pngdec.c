@@ -45,6 +45,9 @@ typedef struct PNGDecContext {
     ThreadFrame last_picture;
     ThreadFrame picture;
 
+    uint8_t* extra_data;
+    int extra_data_size;
+
     int state;
     int width, height;
     int cur_w, cur_h;
@@ -787,7 +790,7 @@ static int decode_trns_chunk(AVCodecContext *avctx, PNGDecContext *s,
 
         for (i = 0; i < length / 2; i++) {
             /* only use the least significant bits */
-            v = bytestream2_get_be16(&s->gb) & ((1 << s->bit_depth) - 1);
+            v = av_mod_uintp2(bytestream2_get_be16(&s->gb), s->bit_depth);
 
             if (s->bit_depth > 8)
                 AV_WB16(&s->transparent_color_be[2 * i], v);
@@ -1136,6 +1139,7 @@ static int decode_frame_common(AVCodecContext *avctx, PNGDecContext *s,
             case MKTAG('p', 'H', 'Y', 's'):
             case MKTAG('t', 'E', 'X', 't'):
             case MKTAG('I', 'D', 'A', 'T'):
+            case MKTAG('t', 'R', 'N', 'S'):
                 break;
             default:
                 goto skip_tag;
@@ -1257,7 +1261,7 @@ exit_loop:
         }
     }
 
-    /* handle p-frames only if a predecessor frame is available */
+    /* handle P-frames only if a predecessor frame is available */
     if (s->last_picture.f->data[0]) {
         if (   !(avpkt->flags & AV_PKT_FLAG_KEY) && avctx->codec_tag != AV_RL32("MPNG")
             && s->last_picture.f->width == p->width
@@ -1360,14 +1364,28 @@ static int decode_frame_apng(AVCodecContext *avctx,
     p = s->picture.f;
 
     if (!(s->state & PNG_IHDR)) {
-        if (!avctx->extradata_size)
+        int side_data_size = 0;
+        uint8_t *side_data = NULL;
+        if (avpkt)
+            side_data = av_packet_get_side_data(avpkt, AV_PKT_DATA_NEW_EXTRADATA, &side_data_size);
+
+        if (side_data_size) {
+            av_freep(&s->extra_data);
+            s->extra_data = av_mallocz(side_data_size + AV_INPUT_BUFFER_PADDING_SIZE);
+            if (!s->extra_data)
+                return AVERROR(ENOMEM);
+            s->extra_data_size = side_data_size;
+            memcpy(s->extra_data, side_data, s->extra_data_size);
+        }
+
+        if (!s->extra_data_size)
             return AVERROR_INVALIDDATA;
 
         /* only init fields, there is no zlib use in extradata */
         s->zstream.zalloc = ff_png_zalloc;
         s->zstream.zfree  = ff_png_zfree;
 
-        bytestream2_init(&s->gb, avctx->extradata, avctx->extradata_size);
+        bytestream2_init(&s->gb, s->extra_data, s->extra_data_size);
         if ((ret = decode_frame_common(avctx, s, p, avpkt)) < 0)
             goto end;
     }
@@ -1493,6 +1511,8 @@ static av_cold int png_dec_end(AVCodecContext *avctx)
     s->last_row_size = 0;
     av_freep(&s->tmp_row);
     s->tmp_row_size = 0;
+    av_freep(&s->extra_data);
+    s->extra_data_size = 0;
 
     return 0;
 }
