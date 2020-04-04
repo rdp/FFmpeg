@@ -48,20 +48,26 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
     if (this->connectedto)
         return VFW_E_ALREADY_CONNECTED;
 
-    ff_print_AM_MEDIA_TYPE(type);
+    //ff_print_AM_MEDIA_TYPE(type);
     if (devtype == VideoDevice) {
         if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video))
             return VFW_E_TYPE_NOT_ACCEPTED;
     } else {
-        if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio))
-            return VFW_E_TYPE_NOT_ACCEPTED;
+        if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio)) {
+            if (IsEqualGUID(&type->majortype, &MEDIATYPE_AUXLine21Data) && IsEqualGUID(&type->subtype, &MEDIASUBTYPE_Line21_BytePair )) {
+              dshowdebug("accepting VBI CC TYPE FAKE\n");
+	    } else {
+              dshowdebug("rejecting connection because not majortype audio\n");
+              return VFW_E_TYPE_NOT_ACCEPTED;
+	    }
+	}
     }
 
     IPin_AddRef(pin);
     this->connectedto = pin;
 
     ff_copy_dshow_media_type(&this->type, type);
-
+    dshowdebug("accepted connection\n", this);
     return S_OK;
 }
 long WINAPI
@@ -359,7 +365,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     ctx = s->priv_data;
     index = pin->filter->stream_index;
 
-    av_log(NULL, AV_LOG_VERBOSE, "dshow passing through packet of type %s size %8d "
+    av_log(NULL, AV_LOG_VERBOSE, "dshow capturing packet of type %s size %8d "
         "timestamp %"PRId64" orig timestamp %"PRId64" graph timestamp %"PRId64" diff %"PRId64" %s\n",
         devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, ctx->device_name[devtype]);
     pin->filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
