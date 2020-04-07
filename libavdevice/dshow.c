@@ -193,6 +193,7 @@ callback(void *priv_data, int index, uint8_t *buf, int buf_size, int64_t time, e
 
     return;
 fail:
+    printf("fail1\n");
     ReleaseMutex(ctx->mutex);
     return;
 }
@@ -607,20 +608,34 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         char *pin_buf = NULL;
         char *desired_pin_name = devtype == VideoDevice ? ctx->video_pin_name : ctx->audio_pin_name;
 
-        IPin_QueryPinInfo(pin, &info);
+        if (IPin_QueryPinInfo(pin, &info) != S_OK) {
+          av_log(avctx, AV_LOG_ERROR, "skipping pin, could not get info/name\n");
+          goto next;
+        }
+        name_buf = dup_wchar_to_utf8(info.achName);
         IBaseFilter_Release(info.pFilter);
 
-        if (info.dir != PINDIR_OUTPUT)
+        if (info.dir != PINDIR_OUTPUT) {
+            av_log(avctx, AV_LOG_ERROR, "skipping pin, not output pin %s\n", name_buf);
             goto next;
-        if (IPin_QueryInterface(pin, &IID_IKsPropertySet, (void **) &p) != S_OK)
+	}
+        if (IPin_QueryInterface(pin, &IID_IKsPropertySet, (void **) &p) != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "skipping pin, not propserty set pin %s\n", name_buf);
             goto next;
+	}
         if (IKsPropertySet_Get(p, &AMPROPSETID_Pin, AMPROPERTY_PIN_CATEGORY,
-                               NULL, 0, &category, sizeof(GUID), &r2) != S_OK)
+                               NULL, 0, &category, sizeof(GUID), &r2) != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "skipping pin, could not get category %s\n", name_buf);
             goto next;
-        if (!IsEqualGUID(&category, &PIN_CATEGORY_CAPTURE))
+	}
+        if (!IsEqualGUID(&category, &PIN_CATEGORY_CAPTURE)) {
+          if (!IsEqualGUID(&category, &PIN_CATEGORY_VBI)) {
+            av_log(avctx, AV_LOG_ERROR, "skipping pin, not category capture %s\n", name_buf);
             goto next;
-        name_buf = dup_wchar_to_utf8(info.achName);
+	  } else
+printf("HERE! good VBI %s\n", name_buf);
 
+	}
         r = IPin_QueryId(pin, &pin_id);
         if (r != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not query pin id\n");
@@ -645,6 +660,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         if (set_format) {
             dshow_cycle_formats(avctx, devtype, pin, &format_set);
             if (!format_set) {
+              av_log(avctx, AV_LOG_ERROR, "skipping pin, unable to set format %s\n", name_buf);
                 goto next;
             }
         }
@@ -654,17 +670,32 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
             }
         }
 
-        if (IPin_EnumMediaTypes(pin, &types) != S_OK)
+        if (IPin_EnumMediaTypes(pin, &types) != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "skipping pin, unable to enum media types %s\n", name_buf);
             goto next;
+	}
 
         IEnumMediaTypes_Reset(types);
         /* in case format_set was not called, just verify the majortype */
         while (!device_pin && IEnumMediaTypes_Next(types, 1, &type, NULL) == S_OK) {
             if (IsEqualGUID(&type->majortype, mediatype[devtype])) {
-                device_pin = pin;
-                av_log(avctx, AV_LOG_DEBUG, "Selecting pin %s on %s\n", name_buf, devtypename);
+                            device_pin = pin;
+	                    av_log(avctx, AV_LOG_DEBUG, "Selecting pin %s on %s\n", name_buf, devtypename);
+	                     goto next;
+	    } else {
+              if (IsEqualGUID(&type->majortype, &MEDIATYPE_VBI)) {
+		      if (type->lSampleSize > 1 || TRUE) { // didn't work :(
+                device_pin = pin; // signify success
+                av_log(avctx, AV_LOG_DEBUG, "Selecting fake VBI pin %s on %s\n", name_buf, devtypename);
+		      } else {
+                av_log(avctx, AV_LOG_DEBUG, "rejecting 1 byter fake VBI pin %s on %s\n", name_buf, devtypename);
+
+		      }
                 goto next;
-            }
+	      } else {
+                av_log(avctx, AV_LOG_ERROR, "skipping pin, wrong major media type %s\n", name_buf);
+	      }
+	    }
             CoTaskMemFree(type);
         }
 
@@ -716,9 +747,9 @@ dshow_list_device_options(AVFormatContext *avctx, ICreateDevEnum *devenum,
     if ((r = dshow_cycle_devices(avctx, devenum, devtype, sourcetype, &device_filter, &device_unique_name)) < 0)
         return r;
     ctx->device_filter[devtype] = device_filter;
+    ctx->device_unique_name[devtype] = device_unique_name;
     if ((r = dshow_cycle_pins(avctx, devtype, sourcetype, device_filter, NULL)) < 0)
         return r;
-    av_freep(&device_unique_name);
     return 0;
 }
 
@@ -970,7 +1001,7 @@ dshow_add_device(AVFormatContext *avctx,
             bih = &v->bmiHeader;
         }
         if (!bih) {
-            av_log(avctx, AV_LOG_ERROR, "Could not get media type.\n");
+            av_log(avctx, AV_LOG_ERROR, "Could 1not get media type.\n");
             goto error;
         }
 
@@ -1011,14 +1042,15 @@ dshow_add_device(AVFormatContext *avctx,
                 }
             }
         }
-    } else {
+    } else if (devtype == AudioDevice) {
+      if (0) {
         WAVEFORMATEX *fx = NULL;
 
         if (IsEqualGUID(&type.formattype, &FORMAT_WaveFormatEx)) {
             fx = (void *) type.pbFormat;
         }
         if (!fx) {
-            av_log(avctx, AV_LOG_ERROR, "Could not get media type.\n");
+            av_log(avctx, AV_LOG_ERROR, "Could 2not get media type.\n");
             goto error;
         }
 
@@ -1027,6 +1059,13 @@ dshow_add_device(AVFormatContext *avctx,
         par->codec_id    = waveform_codec_id(par->format);
         par->sample_rate = fx->nSamplesPerSec;
         par->channels    = fx->nChannels;
+      } else {
+        av_log(avctx, AV_LOG_ERROR, "FAKE VBI TYPE ish\n");
+        par->codec_type  = AVMEDIA_TYPE_SUBTITLE; // AVCodecParameters is par
+        par->codec_id    = AV_CODEC_ID_EIA_608; // :|
+	par->bits_per_raw_sample = 16; // denote it as "RAW" EIA-608 byte pairs
+      }
+
     }
 
     avpriv_set_pts_info(st, 64, 1, 10000000);
@@ -1191,21 +1230,21 @@ static int dshow_read_header(AVFormatContext *avctx)
 
     r = IGraphBuilder_QueryInterface(graph, &IID_IMediaControl, (void **) &control);
     if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not get media control.\n");
+        av_log(avctx, AV_LOG_ERROR, "Could 3not get media control.\n");
         goto error;
     }
     ctx->control = control;
 
     r = IGraphBuilder_QueryInterface(graph, &IID_IMediaEvent, (void **) &media_event);
     if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not get media event.\n");
+        av_log(avctx, AV_LOG_ERROR, "Could 4not get media event.\n");
         goto error;
     }
     ctx->media_event = media_event;
 
     r = IMediaEvent_GetEventHandle(media_event, (void *) &media_event_handle);
     if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not get media event handle.\n");
+        av_log(avctx, AV_LOG_ERROR, "Could 5not get media event handle.\n");
         goto error;
     }
     proc = GetCurrentProcess();
@@ -1264,6 +1303,7 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
     struct dshow_ctx *ctx = s->priv_data;
     AVPacketList *pktl = NULL;
 
+    av_log(ctx, AV_LOG_DEBUG, "dshow_read_packet\n");
     while (!ctx->eof && !pktl) {
         WaitForSingleObject(ctx->mutex, INFINITE);
         pktl = ctx->pktl;
@@ -1285,6 +1325,7 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
             }
         }
     }
+    av_log(ctx, AV_LOG_DEBUG, "passing through GOOD a packet size %d\n", pkt->size);
 
     return ctx->eof ? AVERROR(EIO) : pkt->size;
 }

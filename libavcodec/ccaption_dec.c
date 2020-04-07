@@ -255,11 +255,13 @@ typedef struct CCaptionSubContext {
 
 static av_cold int init_decoder(AVCodecContext *avctx)
 {
+    printf("init cc bits_per_raw=%d\n", avctx->bits_per_raw_sample);
     int ret;
     CCaptionSubContext *ctx = avctx->priv_data;
 
     av_bprint_init(&ctx->buffer, 0, AV_BPRINT_SIZE_UNLIMITED);
     /* taking by default roll up to 2 */
+    // seems to assume rollup, OK...
     ctx->mode = CCMODE_ROLLUP;
     ctx->rollup = 2;
     ctx->cursor_row = 10;
@@ -281,6 +283,7 @@ static av_cold int init_decoder(AVCodecContext *avctx)
 
 static av_cold int close_decoder(AVCodecContext *avctx)
 {
+	printf("close cc\n");
     CCaptionSubContext *ctx = avctx->priv_data;
     av_bprint_finalize(&ctx->buffer, NULL);
     av_freep(&ctx->pktbuf);
@@ -290,6 +293,7 @@ static av_cold int close_decoder(AVCodecContext *avctx)
 
 static void flush_decoder(AVCodecContext *avctx)
 {
+	printf("flush cc\n");
     CCaptionSubContext *ctx = avctx->priv_data;
     ctx->screen[0].row_used = 0;
     ctx->screen[1].row_used = 0;
@@ -351,14 +355,18 @@ static int validate_cc_data_pair(uint8_t *cc_data_pair)
 {
     uint8_t cc_valid = (*cc_data_pair & 4) >>2;
     uint8_t cc_type = *cc_data_pair & 3;
+        av_log(NULL, AV_LOG_DEBUG, "cc parity check 0x%x 0x%x\n", cc_data_pair[0], cc_data_pair[1]);
 
-    if (!cc_valid)
+    if (!cc_valid){
+        av_log(NULL, AV_LOG_DEBUG, "cc parity fail 0x%x 0x%x\n", cc_data_pair[0], cc_data_pair[1]);
         return AVERROR_INVALIDDATA;
+    }
 
     // if EIA-608 data then verify parity.
-    if (cc_type==0 || cc_type==1) {
+    if (cc_type==0 || cc_type==1) { // NTSC_CC_FIELD_1 , 2
         if (!av_parity(cc_data_pair[2])) {
-            return AVERROR_INVALIDDATA;
+          av_log(NULL, AV_LOG_DEBUG, "cc parity fail2\n");
+          return AVERROR_INVALIDDATA;
         }
         if (!av_parity(cc_data_pair[1])) {
             cc_data_pair[1]=0x7F;
@@ -367,12 +375,17 @@ static int validate_cc_data_pair(uint8_t *cc_data_pair)
 
     //Skip non-data
     if ((cc_data_pair[0] == 0xFA || cc_data_pair[0] == 0xFC || cc_data_pair[0] == 0xFD)
-         && (cc_data_pair[1] & 0x7F) == 0 && (cc_data_pair[2] & 0x7F) == 0)
+         && (cc_data_pair[1] & 0x7F) == 0 && (cc_data_pair[2] & 0x7F) == 0) {
+        av_log(NULL, AV_LOG_DEBUG, "cc parity fail3\n");
         return AVERROR_PATCHWELCOME;
+    }
 
     //skip 708 data
     if (cc_type == 3 || cc_type == 2)
+    {
+        av_log(NULL, AV_LOG_DEBUG, "cc parity fail4\n");
         return AVERROR_PATCHWELCOME;
+    }
 
     /* remove parity bit */
     cc_data_pair[1] &= 0x7F;
@@ -756,6 +769,7 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     int len = avpkt->size;
     int ret = 0;
     int i;
+    av_log(ctx, AV_LOG_DEBUG, "cc decode len=%d bits_per_raw_sample=%d\n", len, avctx->bits_per_raw_sample);
 
     av_fast_padded_malloc(&ctx->pktbuf, &ctx->pktbuf_size, len);
     if (!ctx->pktbuf) {
@@ -764,19 +778,27 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     }
     memcpy(ctx->pktbuf, avpkt->data, len);
     bptr = ctx->pktbuf;
-
+    printf("cc len=%d\n", len);
     for (i  = 0; i < len; i += 3) {
         uint8_t cc_type = *(bptr + i) & 3;
-        if (validate_cc_data_pair(bptr + i))
+        if (validate_cc_data_pair(bptr + i)) {
+           av_log(ctx, AV_LOG_DEBUG, "cc punt invalid\n", len);
             continue;
+	}
         /* ignoring data field 1 */
-        if(cc_type == 1)
+        if(cc_type == 1) {
+           av_log(ctx, AV_LOG_DEBUG, "cc punt cc_type\n", len);
             continue;
-        else
+	    }
+        else {
+           av_log(ctx, AV_LOG_DEBUG, "cc process_cc608\n", len);
             process_cc608(ctx, start_time, *(bptr + i + 1) & 0x7f, *(bptr + i + 2) & 0x7f);
+	    }
 
-        if (!ctx->buffer_changed)
+        if (!ctx->buffer_changed) {
+           av_log(ctx, AV_LOG_DEBUG, "cc !buffer_changed\n", len);
             continue;
+	}
         ctx->buffer_changed = 0;
 
         if (*ctx->buffer.str || ctx->real_time)
@@ -812,6 +834,7 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     }
 
     *got_sub = sub->num_rects > 0;
+           av_log(ctx, AV_LOG_DEBUG, "cc here2 %d ret=%d\n", len, ret);
     return ret;
 }
 
@@ -831,7 +854,7 @@ static const AVClass ccaption_dec_class = {
 
 AVCodec ff_ccaption_decoder = {
     .name           = "cc_dec",
-    .long_name      = NULL_IF_CONFIG_SMALL("Closed Caption (EIA-608 / CEA-708)"),
+    .long_name      = NULL_IF_CONFIG_SMALL("Closed Caption (EIA-608 over CEA-708, raw EIA-608)"),
     .type           = AVMEDIA_TYPE_SUBTITLE,
     .id             = AV_CODEC_ID_EIA_608,
     .priv_data_size = sizeof(CCaptionSubContext),

@@ -261,7 +261,7 @@ void avpriv_request_sample(void *avc,
 #define PTRDIFF_SPECIFIER "td"
 #define SIZE_SPECIFIER "zu"
 #endif
-
+#define DEBUG 1
 #ifdef DEBUG
 #   define ff_dlog(ctx, ...) av_log(ctx, AV_LOG_DEBUG, __VA_ARGS__)
 #else
