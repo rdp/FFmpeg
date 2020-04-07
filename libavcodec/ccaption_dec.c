@@ -345,11 +345,35 @@ static void write_char(CCaptionSubContext *ctx, struct Screen *screen, char ch)
 }
 
 /**
- * This function after validating parity bit, also remove it from data pair.
- * The first byte doesn't pass parity, we replace it with a solid blank
- * and process the pair.
- * If the second byte doesn't pass parity, it returns INVALIDDATA
- * user can ignore the whole pair and pass the other pair.
+ * this function accepts bytes [EIA 608 first byte, EIA 608 second byte]
+ * check both for parity
+ * and strips parity on success.
+ */
+static int validate_eia_608_byte_pair(uint8_t *cc_data_pair) {
+        av_log(NULL, AV_LOG_DEBUG, "entering validate_eia_608_byte_pair 0x%x 0x%x\n", cc_data_pair[0], cc_data_pair[1]);
+        if (!av_parity(cc_data_pair[1])) {
+          av_log(NULL, AV_LOG_DEBUG, "cc parity fail2\n");
+          return AVERROR_INVALIDDATA;
+        }
+        if (!av_parity(cc_data_pair[0])) {
+            cc_data_pair[1]=0x7F; // solid blank
+        }
+        if ((cc_data_pair[0] & 0x7F) == 0 && (cc_data_pair[1] & 0x7F) == 0) {
+          return AVERROR_INVALIDDATA; // padding bytess
+	}
+    /* remove parity bit */
+    cc_data_pair[0] &= 0x7F;
+    cc_data_pair[1] &= 0x7F;
+    return 0;
+}
+
+/**
+ * This function accepts "cc_data_pair" = [708 header byte, EIA 608 first byte, EIA 608 second byte]
+ * This function after validating 608 parity bits, also remove them from data pair.
+ * If the first 608 byte doesn't pass parity, we replace it with a solid blank
+ * and process the pair anyway.
+ * If the second byte or header doesn't pass parity, it returns INVALIDDATA
+ * user can ignore the whole pair and go to the next pair.
  */
 static int validate_cc_data_pair(uint8_t *cc_data_pair)
 {
@@ -362,35 +386,20 @@ static int validate_cc_data_pair(uint8_t *cc_data_pair)
         return AVERROR_INVALIDDATA;
     }
 
-    // if EIA-608 data then verify parity.
-    if (cc_type==0 || cc_type==1) { // NTSC_CC_FIELD_1 , 2
-        if (!av_parity(cc_data_pair[2])) {
-          av_log(NULL, AV_LOG_DEBUG, "cc parity fail2\n");
-          return AVERROR_INVALIDDATA;
-        }
-        if (!av_parity(cc_data_pair[1])) {
-            cc_data_pair[1]=0x7F;
-        }
-    }
-
-    //Skip non-data
-    if ((cc_data_pair[0] == 0xFA || cc_data_pair[0] == 0xFC || cc_data_pair[0] == 0xFD)
-         && (cc_data_pair[1] & 0x7F) == 0 && (cc_data_pair[2] & 0x7F) == 0) {
-        av_log(NULL, AV_LOG_DEBUG, "cc parity fail3\n");
-        return AVERROR_PATCHWELCOME;
-    }
-
-    //skip 708 data
+    //skip 708 data, we only support "608 over 708"
     if (cc_type == 3 || cc_type == 2)
     {
         av_log(NULL, AV_LOG_DEBUG, "cc parity fail4\n");
         return AVERROR_PATCHWELCOME;
     }
 
-    /* remove parity bit */
-    cc_data_pair[1] &= 0x7F;
-    cc_data_pair[2] &= 0x7F;
-
+    // if EIA-608 data then verify parity.
+    if (cc_type==0 || cc_type==1) {
+      if (validate_eia_608_byte_pair(cc_data_pair + 1)) {
+        av_log(NULL, AV_LOG_DEBUG, "cc parity fail5\n");
+        return AVERROR_INVALIDDATA;
+      }
+    }
     return 0;
 }
 
@@ -769,6 +778,7 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     int len = avpkt->size;
     int ret = 0;
     int i;
+    int raw_608 = avctx->bits_per_raw_sample == 16;
     av_log(ctx, AV_LOG_DEBUG, "cc decode len=%d bits_per_raw_sample=%d\n", len, avctx->bits_per_raw_sample);
 
     av_fast_padded_malloc(&ctx->pktbuf, &ctx->pktbuf_size, len);
@@ -778,32 +788,45 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     }
     memcpy(ctx->pktbuf, avpkt->data, len);
     bptr = ctx->pktbuf;
-    printf("cc len=%d\n", len);
-    for (i  = 0; i < len; i += 3) {
-        uint8_t cc_type = *(bptr + i) & 3;
-        if (validate_cc_data_pair(bptr + i)) {
-           av_log(ctx, AV_LOG_DEBUG, "cc punt invalid\n", len);
+    int stride = 3;
+    if (raw_608) {
+	    stride = 2;
+	    av_log(ctx, AV_LOG_DEBUG, "raw stride");
+    }
+    for (i  = 0; i < len; i += stride) {
+	if (raw_608) {
+            if (validate_eia_608_byte_pair(bptr)) {
+             av_log(ctx, AV_LOG_DEBUG, "cc punt invalidd\n", len);
+             continue;
+	    }
+             av_log(ctx, AV_LOG_DEBUG, "cc PROCESSING!\n", len);
+	    process_cc608(ctx, start_time, *(bptr + i), *(bptr + i + 1));
+	} else {
+          uint8_t cc_type = *(bptr + i) & 3;
+          if (validate_cc_data_pair(bptr + i)) {
+             av_log(ctx, AV_LOG_DEBUG, "cc punt invalid\n", len);
+             continue;
+  	  }
+          /* ignoring data field 1 */
+          if(cc_type == 1) {
+               av_log(ctx, AV_LOG_DEBUG, "cc punt cc_type\n", len);
             continue;
+	   }
+          else {
+             av_log(ctx, AV_LOG_DEBUG, "cc process_cc608\n", len);
+            process_cc608(ctx, start_time, *(bptr + i + 1), *(bptr + i + 2));
+	  }
 	}
-        /* ignoring data field 1 */
-        if(cc_type == 1) {
-           av_log(ctx, AV_LOG_DEBUG, "cc punt cc_type\n", len);
-            continue;
-	    }
-        else {
-           av_log(ctx, AV_LOG_DEBUG, "cc process_cc608\n", len);
-            process_cc608(ctx, start_time, *(bptr + i + 1) & 0x7f, *(bptr + i + 2) & 0x7f);
-	    }
 
         if (!ctx->buffer_changed) {
            av_log(ctx, AV_LOG_DEBUG, "cc !buffer_changed\n", len);
             continue;
 	}
-        ctx->buffer_changed = 0;
+        ctx->buffer_changed = 0; // reset for next time
 
         if (*ctx->buffer.str || ctx->real_time)
         {
-            ff_dlog(ctx, "cdp writing data (%s)\n",ctx->buffer.str);
+            ff_dlog(ctx, "ccd writing data (%s)\n",ctx->buffer.str);
             ret = ff_ass_add_rect(sub, ctx->buffer.str, ctx->readorder++, 0, NULL, NULL);
             if (ret < 0)
                 return ret;
