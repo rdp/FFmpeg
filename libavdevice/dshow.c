@@ -1326,7 +1326,7 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
         }
     }
     if (pkt) {
-      av_log(ctx, AV_LOG_VERBOSE, "dshow passing through packet of %8d ", pkt->size);
+      av_log(ctx, AV_LOG_VERBOSE, "dshow passing to pipeline packet of %8d ", pkt->size);
     }
     return ctx->eof ? AVERROR(EIO) : pkt->size;
 }

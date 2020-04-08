@@ -796,7 +796,7 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     for (i  = 0; i < len; i += stride) {
 	if (raw_608) {
             if (validate_eia_608_byte_pair(bptr)) {
-             av_log(ctx, AV_LOG_DEBUG, "cc punt invalidd\n", len);
+             av_log(ctx, AV_LOG_DEBUG, "cc punt invalid or padding 608\n", len);
              continue;
 	    }
              av_log(ctx, AV_LOG_DEBUG, "cc PROCESSING!\n", len);
