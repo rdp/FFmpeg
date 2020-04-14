@@ -255,7 +255,7 @@ typedef struct CCaptionSubContext {
 
 static av_cold int init_decoder(AVCodecContext *avctx)
 {
-    printf("init cc bits_per_raw=%d\n", avctx->bits_per_raw_sample);
+    printf("init cc bits_per_raw=%d setting rollup 1\n", avctx->bits_per_raw_sample);
     int ret;
     CCaptionSubContext *ctx = avctx->priv_data;
 
@@ -263,7 +263,7 @@ static av_cold int init_decoder(AVCodecContext *avctx)
     /* taking by default roll up to 2 */
     // seems to assume rollup, OK...
     ctx->mode = CCMODE_ROLLUP;
-    ctx->rollup = 2;
+    ctx->rollup = 1;
     ctx->cursor_row = 10;
     ret = ff_ass_subtitle_header(avctx, "Monospace",
                                  ASS_DEFAULT_FONT_SIZE,
@@ -709,7 +709,8 @@ static void process_cc608(CCaptionSubContext *ctx, int64_t pts, uint8_t hi, uint
         case 0x25:
         case 0x26:
         case 0x27:
-            ctx->rollup = lo - 0x23;
+            av_log(ctx, AV_LOG_DEBUG, "ignoring rollup to %d\n", lo - 0x23);
+            //ctx->rollup = lo - 0x23;
             ctx->mode = CCMODE_ROLLUP;
             break;
         case 0x29:
