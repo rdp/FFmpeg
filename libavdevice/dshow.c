@@ -125,8 +125,6 @@ dshow_read_close(AVFormatContext *s)
         CloseHandle(ctx->event[0]);
     if(ctx->event[1])
         CloseHandle(ctx->event[1]);
-    if(ctx->event[2])
-        CloseHandle(ctx->event[2]);
 
     pktl = ctx->pktl;
     while (pktl) {
