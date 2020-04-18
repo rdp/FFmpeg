@@ -643,6 +643,7 @@ extern AVCodec ff_ssa_decoder;
 extern AVCodec ff_ass_encoder;
 extern AVCodec ff_ass_decoder;
 extern AVCodec ff_ccaption_decoder;
+extern AVCodec ff_ccaption_decoder_raw_608;
 extern AVCodec ff_dvbsub_encoder;
 extern AVCodec ff_dvbsub_decoder;
 extern AVCodec ff_dvdsub_encoder;

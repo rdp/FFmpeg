@@ -238,6 +238,7 @@ typedef struct CCaptionSubContext {
     AVBPrint buffer;
     int buffer_changed;
     int rollup;
+    int rollup_override_line_count;
     enum cc_mode mode;
     int64_t start_time;
     /* visible screen time */
@@ -255,15 +256,14 @@ typedef struct CCaptionSubContext {
 
 static av_cold int init_decoder(AVCodecContext *avctx)
 {
-    printf("init cc bits_per_raw=%d setting rollup 1\n", avctx->bits_per_raw_sample);
     int ret;
     CCaptionSubContext *ctx = avctx->priv_data;
 
     av_bprint_init(&ctx->buffer, 0, AV_BPRINT_SIZE_UNLIMITED);
     /* taking by default roll up to 2 */
-    // seems to assume rollup, OK...
     ctx->mode = CCMODE_ROLLUP;
-    ctx->rollup = 1;
+    ctx->rollup = ctx->rollup_override_line_count || 2;
+    printf("init cc bits_per_raw=%d setting rollup %d\n", avctx->bits_per_raw_sample, ctx->rollup);
     ctx->cursor_row = 10;
     ret = ff_ass_subtitle_header(avctx, "Monospace",
                                  ASS_DEFAULT_FONT_SIZE,
@@ -283,7 +283,6 @@ static av_cold int init_decoder(AVCodecContext *avctx)
 
 static av_cold int close_decoder(AVCodecContext *avctx)
 {
-	printf("close cc\n");
     CCaptionSubContext *ctx = avctx->priv_data;
     av_bprint_finalize(&ctx->buffer, NULL);
     av_freep(&ctx->pktbuf);
@@ -293,7 +292,6 @@ static av_cold int close_decoder(AVCodecContext *avctx)
 
 static void flush_decoder(AVCodecContext *avctx)
 {
-	printf("flush cc\n");
     CCaptionSubContext *ctx = avctx->priv_data;
     ctx->screen[0].row_used = 0;
     ctx->screen[1].row_used = 0;
@@ -709,8 +707,8 @@ static void process_cc608(CCaptionSubContext *ctx, int64_t pts, uint8_t hi, uint
         case 0x25:
         case 0x26:
         case 0x27:
-            av_log(ctx, AV_LOG_DEBUG, "ignoring rollup to %d\n", lo - 0x23);
-            //ctx->rollup = lo - 0x23;
+            ctx->rollup = ctx->rollup_override_line_count || (lo - 0x23);
+            av_log(ctx, AV_LOG_DEBUG, "setting rollup to %d\n", ctx->rollup);
             ctx->mode = CCMODE_ROLLUP;
             break;
         case 0x29:
@@ -779,8 +777,9 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     int len = avpkt->size;
     int ret = 0;
     int i;
-    int raw_608 = avctx->bits_per_raw_sample == 16;
-    av_log(ctx, AV_LOG_DEBUG, "cc decode len=%d bits_per_raw_sample=%d\n", len, avctx->bits_per_raw_sample);
+    int stride;
+    int raw_608 = avctx->codec_id == AV_CODEC_ID_EIA_608_RAW_BYTE_PAIRS;
+    av_log(ctx, AV_LOG_DEBUG, "cc decode len=%d raw_608=%d\n", len, raw_608);
 
     av_fast_padded_malloc(&ctx->pktbuf, &ctx->pktbuf_size, len);
     if (!ctx->pktbuf) {
@@ -789,41 +788,33 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     }
     memcpy(ctx->pktbuf, avpkt->data, len);
     bptr = ctx->pktbuf;
-    int stride = 3;
     if (raw_608) {
-	    stride = 2;
-	    av_log(ctx, AV_LOG_DEBUG, "raw stride");
+        stride = 2; // expect 2 byte "per packet"
     }
-    for (i  = 0; i < len; i += stride) {
+    for (i = 0; i < len; i += stride) {
 	if (raw_608) {
             if (validate_eia_608_byte_pair(bptr)) {
-             av_log(ctx, AV_LOG_DEBUG, "cc punt invalid or padding 608\n", len);
-             continue;
+                continue;
 	    }
-             av_log(ctx, AV_LOG_DEBUG, "cc PROCESSING!\n", len);
+            av_log(ctx, AV_LOG_DEBUG, "cc PROCESSING! %d\n", len);
 	    process_cc608(ctx, start_time, *(bptr + i), *(bptr + i + 1));
 	} else {
+          // look for 608 over 708 bytes
           uint8_t cc_type = *(bptr + i) & 3;
-          if (validate_cc_data_pair(bptr + i)) {
-             av_log(ctx, AV_LOG_DEBUG, "cc punt invalid\n", len);
-             continue;
-  	  }
-          /* ignoring data field 1 */
-          if(cc_type == 1) {
-               av_log(ctx, AV_LOG_DEBUG, "cc punt cc_type\n", len);
-            continue;
-	   }
+          if (validate_cc_data_pair(bptr + i))
+              continue;
+          /* ignore NTSC_CC_FIELD_2 (cc_type 1) for now */
+          if (cc_type == 1) 
+              continue;
           else {
-             av_log(ctx, AV_LOG_DEBUG, "cc process_cc608\n", len);
-            process_cc608(ctx, start_time, *(bptr + i + 1), *(bptr + i + 2));
+              process_cc608(ctx, start_time, *(bptr + i + 1), *(bptr + i + 2));
 	  }
 	}
 
         if (!ctx->buffer_changed) {
-           av_log(ctx, AV_LOG_DEBUG, "cc !buffer_changed\n", len);
             continue;
 	}
-        ctx->buffer_changed = 0; // reset for next time
+        ctx->buffer_changed = 0;
 
         if (*ctx->buffer.str || ctx->real_time)
         {
@@ -866,6 +857,7 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
 #define SD AV_OPT_FLAG_SUBTITLE_PARAM | AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
     { "real_time", "emit subtitle events as they are decoded for real-time display", OFFSET(real_time), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, SD },
+    { "rollup_override_line_count", "hard code a value for number of rollup lines [overrides any stream specified setting]", OFFSET(rollup_override_line_count), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, SD },
     {NULL}
 };
 
@@ -875,10 +867,9 @@ static const AVClass ccaption_dec_class = {
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
-
 AVCodec ff_ccaption_decoder = {
     .name           = "cc_dec",
-    .long_name      = NULL_IF_CONFIG_SMALL("Closed Caption (EIA-608 over CEA-708, raw EIA-608)"),
+    .long_name      = NULL_IF_CONFIG_SMALL("Closed Caption (EIA-608 over CEA-708)"),
     .type           = AVMEDIA_TYPE_SUBTITLE,
     .id             = AV_CODEC_ID_EIA_608,
     .priv_data_size = sizeof(CCaptionSubContext),
@@ -888,3 +879,17 @@ AVCodec ff_ccaption_decoder = {
     .decode         = decode,
     .priv_class     = &ccaption_dec_class,
 };
+
+AVCodec ff_ccaption_decoder_raw_608 = {
+    .name           = "cc_dec_raw_608",
+    .long_name      = NULL_IF_CONFIG_SMALL("Closed Caption (raw EIA-608 raw byte pairs)"),
+    .type           = AVMEDIA_TYPE_SUBTITLE,
+    .id             = AV_CODEC_ID_EIA_608_RAW_BYTE_PAIRS,
+    .priv_data_size = sizeof(CCaptionSubContext),
+    .init           = init_decoder,
+    .close          = close_decoder,
+    .flush          = flush_decoder,
+    .decode         = decode,
+    .priv_class     = &ccaption_dec_class,
+};
+

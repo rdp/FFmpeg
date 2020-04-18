@@ -1044,10 +1044,10 @@ dshow_add_device(AVFormatContext *avctx,
         par->sample_rate = fx->nSamplesPerSec;
         par->channels    = fx->nChannels;
     } else {
+	// closed captions
         av_log(avctx, AV_LOG_ERROR, "FAKE VBI TYPE ish\n");
-        par->codec_type  = AVMEDIA_TYPE_SUBTITLE; // AVCodecParameters is par
-        par->codec_id    = AV_CODEC_ID_EIA_608; // :|
-        par->bits_per_raw_sample = 16; // denote it as "RAW" EIA-608 byte pairs TODO
+        par->codec_type  = AVMEDIA_TYPE_SUBTITLE;
+        par->codec_id    = AV_CODEC_ID_EIA_608_RAW_BYTE_PAIRS;
     }
 
     avpriv_set_pts_info(st, 64, 1, 10000000);
