@@ -787,7 +787,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
         }
     }
     enum dshowDeviceType all_device_types[3] = {VideoDevice, AudioDevice, ClosedCaptionDevice};
-    for(int i = 0; i < sizeof(all_device_types)/sizeof(all_device_types[0]); i++) {
+    for(int i = 0; i < sizeof(all_device_types) / sizeof(all_device_types[0]); i++) {
       enum dshowDeviceType candidate = all_device_types[i];
       if (candidate == devtype) {
         continue; // ourself hasn't added one yet, skip
@@ -801,7 +801,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
           device_filter = ctx->device_filter[candidate];
           IBaseFilter_AddRef(ctx->device_filter[candidate]);
         } else {
-          av_log(avctx, AV_LOG_DEBUG, "not reusing previous graph capture filter %s != %s\n", device_filter_unique_name, ctx->device_unique_name[candidate]);
+            av_log(avctx, AV_LOG_DEBUG, "not reusing previous graph capture filter %s != %s\n", device_filter_unique_name, ctx->device_unique_name[candidate]);
         }
 	break;
       }
@@ -1044,8 +1044,7 @@ dshow_add_device(AVFormatContext *avctx,
         par->sample_rate = fx->nSamplesPerSec;
         par->channels    = fx->nChannels;
     } else {
-	// closed captions
-        av_log(avctx, AV_LOG_ERROR, "FAKE VBI TYPE ish\n");
+        // closed captions
         par->codec_type  = AVMEDIA_TYPE_SUBTITLE;
         par->codec_id    = AV_CODEC_ID_EIA_608_RAW_BYTE_PAIRS;
     }
@@ -1324,7 +1323,7 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
         }
     }
     if (pkt) {
-      av_log(ctx, AV_LOG_VERBOSE, "dshow passing to pipeline packet of %8d ", pkt->size);
+      av_log(ctx, AV_LOG_DEBUG, "dshow passing to ffmpeg pipeline packet of %8d ", pkt->size);
     }
     return ctx->eof ? AVERROR(EIO) : pkt->size;
 }

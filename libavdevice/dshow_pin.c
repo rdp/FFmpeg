@@ -57,7 +57,7 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
             return VFW_E_TYPE_NOT_ACCEPTED;
     } else {
         if (IsEqualGUID(&type->majortype, &MEDIATYPE_AUXLine21Data) && IsEqualGUID(&type->subtype, &MEDIASUBTYPE_Line21_BytePair )) {
-            dshowdebug("accepting VBI RAW 608\n");
+            dshowdebug("accepting VBI RAW 608 input\n");
 	} else {
             return VFW_E_TYPE_NOT_ACCEPTED;
 	}
