@@ -343,22 +343,22 @@ static void write_char(CCaptionSubContext *ctx, struct Screen *screen, char ch)
 }
 
 /**
- * this function accepts bytes [EIA 608 first byte, EIA 608 second byte]
- * check both for parity
- * and strips parity on success.
+ * This function accepts a byte pair [EIA 608 first byte, EIA 608 second byte]
+ * checks both for parity and strips parity on success.
+ * If the first byte doesn't pass parity, replace it with a solid blank
+ * and process the pair anyway.
+ * Returns failure for parity failure or "no data" (padding bytes).
  */
 static int validate_eia_608_byte_pair(uint8_t *cc_data_pair) {
-        av_log(NULL, AV_LOG_DEBUG, "entering validate_eia_608_byte_pair 0x%x 0x%x\n", cc_data_pair[0], cc_data_pair[1]);
-        if (!av_parity(cc_data_pair[1])) {
-          av_log(NULL, AV_LOG_DEBUG, "cc parity fail2\n");
-          return AVERROR_INVALIDDATA;
-        }
-        if (!av_parity(cc_data_pair[0])) {
-            cc_data_pair[1]=0x7F; // solid blank
-        }
-        if ((cc_data_pair[0] & 0x7F) == 0 && (cc_data_pair[1] & 0x7F) == 0) {
-          return AVERROR_INVALIDDATA; // padding bytess
-	}
+    if (!av_parity(cc_data_pair[1])) {
+        return AVERROR_INVALIDDATA;
+    }
+    if (!av_parity(cc_data_pair[0])) {
+        cc_data_pair[0]=0x7F; // solid blank
+    }
+    if ((cc_data_pair[0] & 0x7F) == 0 && (cc_data_pair[1] & 0x7F) == 0) {
+        return AVERROR_INVALIDDATA; // padding bytes
+    }
     /* remove parity bit */
     cc_data_pair[0] &= 0x7F;
     cc_data_pair[1] &= 0x7F;
@@ -367,35 +367,27 @@ static int validate_eia_608_byte_pair(uint8_t *cc_data_pair) {
 
 /**
  * This function accepts "cc_data_pair" = [708 header byte, EIA 608 first byte, EIA 608 second byte]
- * This function after validating 608 parity bits, also remove them from data pair.
- * If the first 608 byte doesn't pass parity, we replace it with a solid blank
- * and process the pair anyway.
- * If the second byte or header doesn't pass parity, it returns INVALIDDATA
- * user can ignore the whole pair and go to the next pair.
+ * This function after validating parity bits, also removes parity bits them from 608 data pair.
  */
 static int validate_cc_data_pair(uint8_t *cc_data_pair)
 {
+    int ret;
     uint8_t cc_valid = (*cc_data_pair & 4) >>2;
     uint8_t cc_type = *cc_data_pair & 3;
-        av_log(NULL, AV_LOG_DEBUG, "cc parity check 0x%x 0x%x\n", cc_data_pair[0], cc_data_pair[1]);
 
-    if (!cc_valid){
-        av_log(NULL, AV_LOG_DEBUG, "cc parity fail 0x%x 0x%x\n", cc_data_pair[0], cc_data_pair[1]);
+    if (!cc_valid)
         return AVERROR_INVALIDDATA;
-    }
 
-    //skip 708 data, we only support "608 over 708"
+    // skip 708 data, we only support "608 over 708" not native 708
     if (cc_type == 3 || cc_type == 2)
     {
-        av_log(NULL, AV_LOG_DEBUG, "cc parity fail4\n");
         return AVERROR_PATCHWELCOME;
     }
 
-    // if EIA-608 data then verify parity.
+    // Must be EIA-608 data, verify parity.
     if (cc_type==0 || cc_type==1) {
-      if (validate_eia_608_byte_pair(cc_data_pair + 1)) {
-        av_log(NULL, AV_LOG_DEBUG, "cc parity fail5\n");
-        return AVERROR_INVALIDDATA;
+      if (ret = validate_eia_608_byte_pair(cc_data_pair + 1)) {
+          return ret;
       }
     }
     return 0;
@@ -779,7 +771,6 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     int i;
     int stride;
     int raw_608 = avctx->codec_id == AV_CODEC_ID_EIA_608_RAW_BYTE_PAIRS;
-    av_log(ctx, AV_LOG_DEBUG, "cc decode len=%d raw_608=%d\n", len, raw_608);
 
     av_fast_padded_malloc(&ctx->pktbuf, &ctx->pktbuf_size, len);
     if (!ctx->pktbuf) {
@@ -796,7 +787,6 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
             if (validate_eia_608_byte_pair(bptr)) {
                 continue;
 	    }
-            av_log(ctx, AV_LOG_DEBUG, "cc PROCESSING! %d\n", len);
 	    process_cc608(ctx, start_time, *(bptr + i), *(bptr + i + 1));
 	} else {
           // look for 608 over 708 bytes
@@ -804,21 +794,20 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
           if (validate_cc_data_pair(bptr + i))
               continue;
           /* ignore NTSC_CC_FIELD_2 (cc_type 1) for now */
-          if (cc_type == 1) 
+          if (cc_type == 1)
               continue;
           else {
               process_cc608(ctx, start_time, *(bptr + i + 1), *(bptr + i + 2));
 	  }
 	}
 
-        if (!ctx->buffer_changed) {
+        if (!ctx->buffer_changed)
             continue;
-	}
         ctx->buffer_changed = 0;
 
         if (*ctx->buffer.str || ctx->real_time)
         {
-            ff_dlog(ctx, "ccd writing data (%s)\n",ctx->buffer.str);
+            ff_dlog(ctx, "writing data (%s)\n",ctx->buffer.str);
             ret = ff_ass_add_rect(sub, ctx->buffer.str, ctx->readorder++, 0, NULL, NULL);
             if (ret < 0)
                 return ret;
@@ -849,7 +838,6 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     }
 
     *got_sub = sub->num_rects > 0;
-           av_log(ctx, AV_LOG_DEBUG, "cc here2 %d ret=%d\n", len, ret);
     return ret;
 }
 
@@ -857,7 +845,7 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
 #define SD AV_OPT_FLAG_SUBTITLE_PARAM | AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
     { "real_time", "emit subtitle events as they are decoded for real-time display", OFFSET(real_time), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, SD },
-    { "rollup_override_line_count", "hard code a value for number of rollup lines [overrides any stream specified setting]", OFFSET(rollup_override_line_count), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, SD },
+    { "rollup_override_line_count", "hard code number of rollup lines [overrides any count specified by the captions themselves]", OFFSET(rollup_override_line_count), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, SD },
     {NULL}
 };
 
@@ -882,7 +870,7 @@ AVCodec ff_ccaption_decoder = {
 
 AVCodec ff_ccaption_decoder_raw_608 = {
     .name           = "cc_dec_raw_608",
-    .long_name      = NULL_IF_CONFIG_SMALL("Closed Caption (raw EIA-608 raw byte pairs)"),
+    .long_name      = NULL_IF_CONFIG_SMALL("Closed Caption (EIA-608 raw byte pairs)"),
     .type           = AVMEDIA_TYPE_SUBTITLE,
     .id             = AV_CODEC_ID_EIA_608_RAW_BYTE_PAIRS,
     .priv_data_size = sizeof(CCaptionSubContext),
@@ -892,4 +880,3 @@ AVCodec ff_ccaption_decoder_raw_608 = {
     .decode         = decode,
     .priv_class     = &ccaption_dec_class,
 };
-

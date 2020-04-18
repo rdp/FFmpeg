@@ -456,7 +456,7 @@ where @var{TYPE} can be either @var{audio}, @var{video}, or @var{closed_caption}
 and @var{NAME} is the device's name or alternative name.
 
 @var{closed_caption} devices must advertise format VBI and have an intermediate
-filter available to convert from VBI to raw EIA 608 closed caption 
+filter available to convert from VBI to raw EIA 608 closed caption
 format byte pairs.
 
 @subsection Options
