@@ -855,6 +855,7 @@ static const AVClass ccaption_dec_class = {
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
+
 AVCodec ff_ccaption_decoder = {
     .name           = "cc_dec",
     .long_name      = NULL_IF_CONFIG_SMALL("Closed Caption (EIA-608 over CEA-708)"),
