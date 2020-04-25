@@ -869,8 +869,8 @@ AVCodec ff_ccaption_decoder = {
     .priv_class     = &ccaption_dec_class,
 };
 
-AVCodec ff_ccaption_decoder_raw_608 = {
-    .name           = "cc_dec_raw_608",
+AVCodec ff_ccaption_raw_608_decoder = {
+    .name           = "cc_raw_608_dec",
     .long_name      = NULL_IF_CONFIG_SMALL("Closed Caption (EIA-608 raw byte pairs)"),
     .type           = AVMEDIA_TYPE_SUBTITLE,
     .id             = AV_CODEC_ID_EIA_608_RAW_BYTE_PAIRS,
