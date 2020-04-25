@@ -749,6 +749,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     IStream *ifile_stream = NULL;
     IStream *ofile_stream = NULL;
     IPersistStream *pers_stream = NULL;
+    enum dshowDeviceType all_device_types[3] = {VideoDevice, AudioDevice, ClosedCaptionDevice};
 
     const wchar_t *filter_name[3] = { L"Audio ffmpeg capture filter", L"Video ffmpeg capture filter", L"VBI ffmpeg capture filter" };
 
@@ -786,7 +787,6 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
             goto error;
         }
     }
-    enum dshowDeviceType all_device_types[3] = {VideoDevice, AudioDevice, ClosedCaptionDevice};
     for(int i = 0; i < sizeof(all_device_types) / sizeof(all_device_types[0]); i++) {
       enum dshowDeviceType candidate = all_device_types[i];
       if (candidate == devtype) {
