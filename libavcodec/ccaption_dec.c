@@ -856,6 +856,13 @@ static const AVClass ccaption_dec_class = {
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
+static const AVClass ccaption_raw_608_dec_class = {
+    .class_name = "Closed caption Decoder Raw 608",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 AVCodec ff_ccaption_decoder = {
     .name           = "cc_dec",
     .long_name      = NULL_IF_CONFIG_SMALL("Closed Caption (EIA-608 over CEA-708)"),
@@ -879,5 +886,5 @@ AVCodec ff_ccaption_raw_608_decoder = {
     .close          = close_decoder,
     .flush          = flush_decoder,
     .decode         = decode,
-    .priv_class     = &ccaption_dec_class,
+    .priv_class     = &ccaption_raw_608_dec_class,
 };
