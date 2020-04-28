@@ -698,11 +698,11 @@ static void process_cc608(CCaptionSubContext *ctx, int64_t pts, uint8_t hi, uint
         case 0x25:
         case 0x26:
         case 0x27:
-	    if (ctx->rollup_override_line_count) {
-	        ctx->rollup = ctx->rollup_override_line_count;
-	    } else {
+            if (ctx->rollup_override_line_count) {
+                ctx->rollup = ctx->rollup_override_line_count;
+            } else {
                 ctx->rollup = (lo - 0x23);
-	    }
+            }
             av_log(ctx, AV_LOG_DEBUG, "setting rollup to %d, requested from stream was %d, override is %d\n", ctx->rollup, (lo - 0x23), ctx->rollup_override_line_count);
             ctx->mode = CCMODE_ROLLUP;
             break;
