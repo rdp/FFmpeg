@@ -252,6 +252,68 @@ Enabled by default.
 
 @end table
 
+@section cc_dec_raw_608
+
+Closed Caption decoder.
+Decodes "raw 608 byte pairs" closed captions.
+
+@subsection Options
+
+@table @option
+@item real_time
+Specifies if the decoder should output "the current screen"
+after each new character appears (in general, with closed
+captions, one new character can appear per frame).
+Default is false, decoder outputs "the current screen"
+only when a line feed occurs.
+
+@item rollup_override_line_count
+Specifies the number of lines to output (if the closed
+caption is using rollup, which is common).
+Typically the stream itself designates how many lines of
+closed caption material to display on the screen.
+This is typically more than one and means some lines are
+repeated in the output, since output occurs with each carriage
+return.
+Default is "0" (starts in rollup mode with line count 2,
+then then changes to whatever the closed caption stream
+later specifies).
+If you want a line output (no duplication), set this value to "1".
+
+@end table
+
+@section dvbsub
+@section cc_dec
+
+Closed Caption decoder.
+
+Decodes "608 over 708" closed captions.
+
+@subsection Options
+
+@table @option
+@item real_time
+Specifies if the decoder should output "the current screen"
+after each new character appears (in general, with closed
+captions, one new character can appear per frame).
+Default is false, decoder outputs "the current screen"
+only when a line feed occurs.
+
+@item rollup_override_line_count
+Specifies the number of lines to output (if the closed
+caption is using rollup, which is common).
+Typically the stream itself designates how many lines of
+closed caption material to display on the screen.
+This is typically more than one and means some lines are
+repeated in the output, since output occurs with each carriage
+return.
+Default is "0" (starts in rollup mode with line count 2,
+then then changes to whatever the closed caption stream
+later specifies).
+If you want a line output (no duplication), set this value to "1".
+
+@end table
+
 @section dvbsub
 
 @subsection Options

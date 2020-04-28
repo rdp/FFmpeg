@@ -238,6 +238,7 @@ typedef struct CCaptionSubContext {
     AVBPrint buffer;
     int buffer_changed;
     int rollup;
+    int rollup_override_line_count;
     enum cc_mode mode;
     int64_t start_time;
     /* visible screen time */
@@ -261,7 +262,7 @@ static av_cold int init_decoder(AVCodecContext *avctx)
     av_bprint_init(&ctx->buffer, 0, AV_BPRINT_SIZE_UNLIMITED);
     /* taking by default roll up to 2 */
     ctx->mode = CCMODE_ROLLUP;
-    ctx->rollup = 2;
+    ctx->rollup = ctx->rollup_override_line_count || 2;
     ctx->cursor_row = 10;
     ret = ff_ass_subtitle_header(avctx, "Monospace",
                                  ASS_DEFAULT_FONT_SIZE,
@@ -697,7 +698,12 @@ static void process_cc608(CCaptionSubContext *ctx, int64_t pts, uint8_t hi, uint
         case 0x25:
         case 0x26:
         case 0x27:
-            ctx->rollup = lo - 0x23;
+            if (ctx->rollup_override_line_count) {
+                ctx->rollup = ctx->rollup_override_line_count;
+            } else {
+                ctx->rollup = (lo - 0x23);
+            }
+            av_log(ctx, AV_LOG_DEBUG, "setting rollup to %d, requested from stream was %d, override is %d\n", ctx->rollup, (lo - 0x23), ctx->rollup_override_line_count);
             ctx->mode = CCMODE_ROLLUP;
             break;
         case 0x29:
@@ -842,6 +848,7 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
 #define SD AV_OPT_FLAG_SUBTITLE_PARAM | AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
     { "real_time", "emit subtitle events as they are decoded for real-time display", OFFSET(real_time), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, SD },
+    { "rollup_override_line_count", "force number of rollup lines [overrides any number specified by the captions themselves]", OFFSET(rollup_override_line_count), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, SD },
     {NULL}
 };
 
