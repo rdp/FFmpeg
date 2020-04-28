@@ -3181,6 +3181,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_TEXT_SUB,
     },
     {
+        .id        = AV_CODEC_ID_EIA_608_RAW_BYTE_PAIRS,
+        .type      = AVMEDIA_TYPE_SUBTITLE,
+        .name      = "eia_608_raw_byte_pairs",
+        .long_name = NULL_IF_CONFIG_SMALL("EIA-608 closed captions raw byte pairs"),
+        .props     = AV_CODEC_PROP_TEXT_SUB,
+    },
+    {
         .id        = AV_CODEC_ID_JACOSUB,
         .type      = AVMEDIA_TYPE_SUBTITLE,
         .name      = "jacosub",
