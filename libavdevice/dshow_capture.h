@@ -61,8 +61,10 @@ struct GUIDoffset {
 enum dshowDeviceType {
     VideoDevice = 0,
     AudioDevice = 1,
+    ClosedCaptionDevice = 2,
 };
 
+// We sometimes want "audio from a video source device" so differentiate this way:
 enum dshowSourceFilterType {
     VideoSourceDevice = 0,
     AudioSourceDevice = 1,
@@ -288,8 +290,8 @@ struct dshow_ctx {
 
     IGraphBuilder *graph;
 
-    char *device_name[2];
-    char *device_unique_name[2];
+    char *device_name[3];
+    char *device_unique_name[3];
 
     int video_device_number;
     int audio_device_number;
@@ -312,10 +314,10 @@ struct dshow_ctx {
     char *video_filter_load_file;
     char *video_filter_save_file;
 
-    IBaseFilter *device_filter[2];
-    IPin        *device_pin[2];
-    libAVFilter *capture_filter[2];
-    libAVPin    *capture_pin[2];
+    IBaseFilter *device_filter[3];
+    IPin        *device_pin[3];
+    libAVFilter *capture_filter[3];
+    libAVPin    *capture_pin[3];
 
     HANDLE mutex;
     HANDLE event[2]; /* event[0] is set by DirectShow
@@ -324,7 +326,7 @@ struct dshow_ctx {
 
     int eof;
 
-    int64_t curbufsize[2];
+    int64_t curbufsize[3];
     unsigned int video_frame_num;
 
     IMediaControl *control;

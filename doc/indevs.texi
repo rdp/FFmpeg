@@ -452,8 +452,12 @@ The input name should be in the format:
 @var{TYPE}=@var{NAME}[:@var{TYPE}=@var{NAME}]
 @end example
 
-where @var{TYPE} can be either @var{audio} or @var{video},
-and @var{NAME} is the device's name or alternative name..
+where @var{TYPE} can be either @var{audio}, @var{video}, or @var{closed_caption}
+and @var{NAME} is the device's name or alternative name.
+
+@var{closed_caption} devices must advertise format VBI and have an intermediate
+directshow filter available to convert from VBI to raw EIA 608 closed caption
+format byte pairs.
 
 @subsection Options
 
@@ -613,6 +617,13 @@ $ ffmpeg -f dshow -video_device_number 1 -i video="Camera"
 Open video device @var{Camera} and audio device @var{Microphone}:
 @example
 $ ffmpeg -f dshow -i video="Camera":audio="Microphone"
+@end example
+
+@item
+Open video device @var{Camera}, closed caption device @var{Camera},
+and audio device @var{Microphone}:
+@example
+$ ffmpeg -f dshow -i video="Camera":audio="Microphone":closed_caption="Camera"
 @end example
 
 @item
