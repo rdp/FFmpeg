@@ -52,9 +52,15 @@ libAVPin_ReceiveConnection(libAVPin *this, IPin *pin,
     if (devtype == VideoDevice) {
         if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Video))
             return VFW_E_TYPE_NOT_ACCEPTED;
-    } else {
+    } else if (devtype == AudioDevice) {
         if (!IsEqualGUID(&type->majortype, &MEDIATYPE_Audio))
             return VFW_E_TYPE_NOT_ACCEPTED;
+    } else {
+        if (IsEqualGUID(&type->majortype, &MEDIATYPE_AUXLine21Data) && IsEqualGUID(&type->subtype, &MEDIASUBTYPE_Line21_BytePair )) {
+            dshowdebug("accepting VBI RAW 608 input\n");
+	} else {
+            return VFW_E_TYPE_NOT_ACCEPTED;
+	}
     }
 
     IPin_AddRef(pin);
@@ -322,7 +328,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     int64_t curtime;
     int64_t orig_curtime;
     int64_t graphtime;
-    const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
+    const char *devtypename = (devtype == VideoDevice) ? "video" : (devtype == AudioDevice) ? "audio" : "VBI";
     IReferenceClock *clock = pin->filter->clock;
     int64_t dummy;
     struct dshow_ctx *ctx;
@@ -359,7 +365,7 @@ libAVMemInputPin_Receive(libAVMemInputPin *this, IMediaSample *sample)
     ctx = s->priv_data;
     index = pin->filter->stream_index;
 
-    av_log(NULL, AV_LOG_VERBOSE, "dshow passing through packet of type %s size %8d "
+    av_log(NULL, AV_LOG_VERBOSE, "dshow captured packet of type %s size %8d "
         "timestamp %"PRId64" orig timestamp %"PRId64" graph timestamp %"PRId64" diff %"PRId64" %s\n",
         devtypename, buf_size, curtime, orig_curtime, graphtime, graphtime - orig_curtime, ctx->device_name[devtype]);
     pin->filter->callback(priv_data, index, buf, buf_size, curtime, devtype);
