@@ -90,24 +90,34 @@ dshow_read_close(AVFormatContext *s)
         libAVPin_Release(ctx->capture_pin[VideoDevice]);
     if (ctx->capture_pin[AudioDevice])
         libAVPin_Release(ctx->capture_pin[AudioDevice]);
+    if (ctx->capture_pin[ClosedCaptionDevice])
+        libAVPin_Release(ctx->capture_pin[ClosedCaptionDevice]);
     if (ctx->capture_filter[VideoDevice])
         libAVFilter_Release(ctx->capture_filter[VideoDevice]);
     if (ctx->capture_filter[AudioDevice])
         libAVFilter_Release(ctx->capture_filter[AudioDevice]);
+    if (ctx->capture_filter[ClosedCaptionDevice])
+        libAVFilter_Release(ctx->capture_filter[ClosedCaptionDevice]);
 
     if (ctx->device_pin[VideoDevice])
         IPin_Release(ctx->device_pin[VideoDevice]);
     if (ctx->device_pin[AudioDevice])
         IPin_Release(ctx->device_pin[AudioDevice]);
+    if (ctx->device_pin[ClosedCaptionDevice])
+        IPin_Release(ctx->device_pin[ClosedCaptionDevice]);
     if (ctx->device_filter[VideoDevice])
         IBaseFilter_Release(ctx->device_filter[VideoDevice]);
     if (ctx->device_filter[AudioDevice])
         IBaseFilter_Release(ctx->device_filter[AudioDevice]);
+    if (ctx->device_filter[ClosedCaptionDevice])
+        IBaseFilter_Release(ctx->device_filter[ClosedCaptionDevice]);
 
     av_freep(&ctx->device_name[0]);
     av_freep(&ctx->device_name[1]);
+    av_freep(&ctx->device_name[2]);
     av_freep(&ctx->device_unique_name[0]);
     av_freep(&ctx->device_unique_name[1]);
+    av_freep(&ctx->device_unique_name[2]);
 
     if(ctx->mutex)
         CloseHandle(ctx->mutex);
@@ -219,8 +229,8 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
 
     const GUID *device_guid[2] = { &CLSID_VideoInputDeviceCategory,
                                    &CLSID_AudioInputDeviceCategory };
-    const char *devtypename = (devtype == VideoDevice) ? "video" : "audio only";
-    const char *sourcetypename = (sourcetype == VideoSourceDevice) ? "video" : "audio";
+    const char *devtypename = (devtype == VideoDevice) ? "video" : (devtype == AudioDevice) ? "audio" : "VBI";
+    const char *sourcetypename = (sourcetype == VideoSourceDevice) ? "video" : "audio only";
 
     r = ICreateDevEnum_CreateClassEnumerator(devenum, device_guid[sourcetype],
                                              (IEnumMoniker **) &classenum, 0);
@@ -569,9 +579,9 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     IPin *pin;
     int r;
 
-    const GUID *mediatype[2] = { &MEDIATYPE_Video, &MEDIATYPE_Audio };
-    const char *devtypename = (devtype == VideoDevice) ? "video" : "audio only";
-    const char *sourcetypename = (sourcetype == VideoSourceDevice) ? "video" : "audio";
+    const GUID *mediatype[3] = { &MEDIATYPE_Video, &MEDIATYPE_Audio, &MEDIATYPE_VBI };
+    const char *devtypename = (devtype == VideoDevice) ? "video" : (devtype == AudioDevice) ? "audio" : "VBI";
+    const char *sourcetypename = (sourcetype == VideoSourceDevice) ? "video" : "audio only";
 
     int set_format = (devtype == VideoDevice && (ctx->framerate ||
                                                 (ctx->requested_width && ctx->requested_height) ||
@@ -617,7 +627,7 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
         if (IKsPropertySet_Get(p, &AMPROPSETID_Pin, AMPROPERTY_PIN_CATEGORY,
                                NULL, 0, &category, sizeof(GUID), &r2) != S_OK)
             goto next;
-        if (!IsEqualGUID(&category, &PIN_CATEGORY_CAPTURE))
+        if (!IsEqualGUID(&category, &PIN_CATEGORY_CAPTURE) && !IsEqualGUID(&category, &PIN_CATEGORY_VBI))
             goto next;
         name_buf = dup_wchar_to_utf8(info.achName);
 
@@ -739,10 +749,9 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     IStream *ifile_stream = NULL;
     IStream *ofile_stream = NULL;
     IPersistStream *pers_stream = NULL;
-    enum dshowDeviceType otherDevType = (devtype == VideoDevice) ? AudioDevice : VideoDevice;
+    enum dshowDeviceType all_device_types[3] = {VideoDevice, AudioDevice, ClosedCaptionDevice};
 
-    const wchar_t *filter_name[2] = { L"Audio capture filter", L"Video capture filter" };
-
+    const wchar_t *filter_name[3] = { L"Audio ffmpeg capture filter", L"Video ffmpeg capture filter", L"VBI ffmpeg capture filter" };
 
     if ( ((ctx->audio_filter_load_file) && (strlen(ctx->audio_filter_load_file)>0) && (sourcetype == AudioSourceDevice)) ||
             ((ctx->video_filter_load_file) && (strlen(ctx->video_filter_load_file)>0) && (sourcetype == VideoSourceDevice)) ) {
@@ -778,16 +787,23 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
             goto error;
         }
     }
-        if (ctx->device_filter[otherDevType]) {
-        // avoid adding add two instances of the same device to the graph, one for video, one for audio
-        // a few devices don't support this (could also do this check earlier to avoid double crossbars, etc. but they seem OK)
-        if (strcmp(device_filter_unique_name, ctx->device_unique_name[otherDevType]) == 0) {
-          av_log(avctx, AV_LOG_DEBUG, "reusing previous graph capture filter... %s\n", device_filter_unique_name);
-          IBaseFilter_Release(device_filter);
-          device_filter = ctx->device_filter[otherDevType];
-          IBaseFilter_AddRef(ctx->device_filter[otherDevType]);
-        } else {
-            av_log(avctx, AV_LOG_DEBUG, "not reusing previous graph capture filter %s != %s\n", device_filter_unique_name, ctx->device_unique_name[otherDevType]);
+    for (int i = 0; i < sizeof(all_device_types) / sizeof(all_device_types[0]); i++) {
+        enum dshowDeviceType candidate = all_device_types[i];
+        if (candidate == devtype) {
+            continue; // ourself hasn't added one yet, skip
+        }
+        if (ctx->device_filter[candidate]) {
+            // avoid adding add two instances of the same device to the graph, one for video, one for audio
+            // a few devices don't support this (could also do this check earlier to avoid double crossbars, etc. but they seem OK)
+            if (strcmp(device_filter_unique_name, ctx->device_unique_name[candidate]) == 0) {
+                av_log(avctx, AV_LOG_DEBUG, "reusing previous graph capture filter... %s\n", device_filter_unique_name);
+                IBaseFilter_Release(device_filter);
+                device_filter = ctx->device_filter[candidate];
+                IBaseFilter_AddRef(ctx->device_filter[candidate]);
+            } else {
+                av_log(avctx, AV_LOG_DEBUG, "not reusing previous graph capture filter %s != %s\n", device_filter_unique_name, ctx->device_unique_name[candidate]);
+            }
+            break;
         }
     }
 
@@ -1011,7 +1027,7 @@ dshow_add_device(AVFormatContext *avctx,
                 }
             }
         }
-    } else {
+    } else if (devtype == AudioDevice) {
         WAVEFORMATEX *fx = NULL;
 
         if (IsEqualGUID(&type.formattype, &FORMAT_WaveFormatEx)) {
@@ -1027,6 +1043,10 @@ dshow_add_device(AVFormatContext *avctx,
         par->codec_id    = waveform_codec_id(par->format);
         par->sample_rate = fx->nSamplesPerSec;
         par->channels    = fx->nChannels;
+    } else {
+        // closed captions
+        par->codec_type  = AVMEDIA_TYPE_SUBTITLE;
+        par->codec_id    = AV_CODEC_ID_EIA_608_RAW_BYTE_PAIRS;
     }
 
     avpriv_set_pts_info(st, 64, 1, 10000000);
@@ -1052,24 +1072,29 @@ static int parse_device_name(AVFormatContext *avctx)
         char *token = strtok(NULL, ":");
         tmp = NULL;
 
-        if        (!strcmp(type, "video")) {
+        if (!strcmp(type, "video")) {
             device_name[0] = token;
         } else if (!strcmp(type, "audio")) {
             device_name[1] = token;
+        } else if (!strcmp(type, "closed_caption")) {
+            device_name[2] = token;
         } else {
             device_name[0] = NULL;
             device_name[1] = NULL;
+            device_name[2] = NULL;
             break;
         }
     }
 
-    if (!device_name[0] && !device_name[1]) {
+    if (!device_name[0] && !device_name[1] && !device_name[2]) {
         ret = 0;
     } else {
         if (device_name[0])
             device_name[0] = av_strdup(device_name[0]);
         if (device_name[1])
             device_name[1] = av_strdup(device_name[1]);
+        if (device_name[2])
+            device_name[2] = av_strdup(device_name[2]);
     }
 
     av_free(name);
@@ -1129,9 +1154,9 @@ static int dshow_read_header(AVFormatContext *avctx)
     }
 
     if (ctx->list_devices) {
-        av_log(avctx, AV_LOG_INFO, "DirectShow video devices (some may be both video and audio devices)\n");
+        av_log(avctx, AV_LOG_INFO, "DirectShow video devices (some may be both video and audio or VBI devices)\n"); // VBI seems to only be on video devices
         dshow_cycle_devices(avctx, devenum, VideoDevice, VideoSourceDevice, NULL, NULL);
-        av_log(avctx, AV_LOG_INFO, "DirectShow audio devices\n");
+        av_log(avctx, AV_LOG_INFO, "DirectShow audio [only] devices\n");
         dshow_cycle_devices(avctx, devenum, AudioDevice, AudioSourceDevice, NULL, NULL);
         ret = AVERROR_EXIT;
         goto error;
@@ -1151,6 +1176,11 @@ static int dshow_read_header(AVFormatContext *avctx)
                 }
             }
         }
+        if (ctx->device_name[ClosedCaptionDevice])
+            if ((r = dshow_list_device_options(avctx, devenum, ClosedCaptionDevice, VideoSourceDevice))) {
+                ret = r;
+                goto error;
+            }
     }
     if (ctx->device_name[VideoDevice]) {
         if ((r = dshow_open_device(avctx, devenum, VideoDevice, VideoSourceDevice)) < 0 ||
@@ -1169,6 +1199,13 @@ static int dshow_read_header(AVFormatContext *avctx)
                 ret = r;
                 goto error;
             }
+        }
+    }
+    if (ctx->device_name[ClosedCaptionDevice]) {
+        if ((r = dshow_open_device(avctx, devenum, ClosedCaptionDevice, VideoSourceDevice)) < 0 ||
+            (r = dshow_add_device(avctx, ClosedCaptionDevice)) < 0) {
+            ret = r;
+            goto error;
         }
     }
     if (ctx->list_options) {
@@ -1285,7 +1322,9 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
             }
         }
     }
-
+    if (pkt) {
+      av_log(ctx, AV_LOG_DEBUG, "dshow passing to av pipeline packet of %8d ", pkt->size);
+    }
     return ctx->eof ? AVERROR(EIO) : pkt->size;
 }
 
