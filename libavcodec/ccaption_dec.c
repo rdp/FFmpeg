@@ -784,6 +784,8 @@ static int decode(AVCodecContext *avctx, void *data, int *got_sub, AVPacket *avp
     bptr = ctx->pktbuf;
     if (raw_608) {
         stride = 2; // expect 2 byte "per packet"
+    } else {
+	stride = 3; // eia 708 Closed caption data packet
     }
     for (i = 0; i < len; i += stride) {
 	if (raw_608) {
